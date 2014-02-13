@@ -318,15 +318,13 @@ class GoogleOAuth2Service(OAuth2Service):
     if not response.status == 200:
       raise OAuth2ServicesError(content)
     person = OAuth2Client.get_data_from_response(content)
-    # TODO: Modify persons keys (extracted from LinkedInOAuth2Service)
-    rv = {
-      'email': person['emailAddress'],
-      'first_name': person['firstName'],
-      'last_name': person['lastName'],
-      'job': person['headline'],
-      'picture_url': person['pictureUrl'],
-      'profile_url': person['publicProfileUrl'],
-    }
+
+    rv = person
+    rv['email'] = person['email']
+    rv['first_name'] = person['given_name']
+    rv['last_name'] = person['family_name']
+    rv['picture_url'] = person['picture']
+    rv['profile_url'] = person['link']
     return rv
 
 

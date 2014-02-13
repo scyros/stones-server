@@ -32,7 +32,7 @@ class BaseUser(Webapp2_user, stones.Expando):
     return [
       ('u', ''),
       ('admin', 'admin'),
-      ('superhero', 'superhero'),
+      ('superhero', ''),
     ]
 
   def __unicode__(self):

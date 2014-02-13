@@ -233,15 +233,18 @@ class BaseHandler(webapp2.RequestHandler):
     _dispatch = False
     if self.users_allowed:
       if self.user:
-        try:
-          for type in self.user.type:
-            _dispatch = _dispatch or type in self.users_allowed
-            if _dispatch:
-              break
-          _dispatch = _dispatch or \
-            self.user.get_id() in self.users_allowed
-        except AttributeError:
-          _dispatch = False
+        if 'superhero' in self.user.type:
+          _dispatch = True
+        else:
+          try:
+            for type in self.user.type:
+              _dispatch = _dispatch or type in self.users_allowed
+              if _dispatch:
+                break
+            _dispatch = _dispatch or \
+              self.user.get_id() in self.users_allowed
+          except AttributeError:
+            _dispatch = False
     else:
       _dispatch = True
 
