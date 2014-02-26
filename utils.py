@@ -95,10 +95,10 @@ class JSONEncoder(json.JSONEncoder):
       return unicode(obj)
     elif isinstance(obj, ndb.Model):
       our_dict = obj.to_dict()
-      if not '$$key$$' in our_dict and obj.key:
-        our_dict['$$key$$'] = obj.key.urlsafe()
-      if not '$$id$$' in our_dict and obj.key:
-        our_dict['$$id$$'] = obj.key.id()
+      if not '__key__' in our_dict and obj.key:
+        our_dict['__key__'] = obj.key.urlsafe()
+      if not '__id__' in our_dict and obj.key:
+        our_dict['__id__'] = obj.key.id()
       return our_dict
     elif isinstance(obj, model.Key):
       return obj.urlsafe()

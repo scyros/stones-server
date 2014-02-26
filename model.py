@@ -160,8 +160,8 @@ class KeyProperty(ndb.KeyProperty, _SetFromDictPropertyMixin):
       elif isinstance(val, dict):
         if val.get('urlsafe_key', None):
           val = ndb.Key(urlsafe=val['urlsafe_key'])
-        elif val.get('$$key$$', None):
-          val = ndb.Key(urlsafe=val['$$key$$'])
+        elif val.get('__key__', None):
+          val = ndb.Key(urlsafe=val['__key__'])
       return val
 
     if self._repeated:
@@ -182,8 +182,8 @@ class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
   #     elif isinstance(val, dict):
   #       if val.get('urlsafe_key', None):
   #         val = ndb.Key(urlsafe=val['urlsafe_key'])
-  #       elif val.get('$$key$$', None):
-  #         val = ndb.Key(urlsafe=val['$$key$$'])
+  #       elif val.get('__key__', None):
+  #         val = ndb.Key(urlsafe=val['__key__'])
   #     return val
 
   #   if self._repeated:
@@ -407,12 +407,12 @@ class Model(ndb.Model):
         self.put_async()
 
   def to_dict(self):
-    '''Returns a dict with special keys $$key$$ and $$id$$ added to
+    '''Returns a dict with special keys __key__ and __id__ added to
     entity values dict.'''
     _to_dict = super(Model, self).to_dict()
     if self._has_complete_key():
-      _to_dict['$$id$$'] = self.key.id()
-      _to_dict['$$key$$'] = self.key.urlsafe()
+      _to_dict['__id__'] = self.key.id()
+      _to_dict['__key__'] = self.key.urlsafe()
     return _to_dict
 
 
@@ -447,8 +447,8 @@ class Expando(ndb.Expando, Model):
       raise datastore_errors.BadValueError('Expected dict, got %r.'
                                            % (value,))
 
-    value.pop('$$key$$', None)
-    value.pop('$$id$$', None)
+    value.pop('__key__', None)
+    value.pop('__id__', None)
     props_names = value.keys()
     props_code_names = {}
     for prop_key, prop in cls._properties.iteritems():
@@ -599,7 +599,7 @@ class ReferenceProperty(StructuredProperty):
                                              ' got %r' % (value,))
       _value = []
       for v in value:
-        urlsafe_key = v.get('urlsafe_key', '') or v.get('$$key$$', '')
+        urlsafe_key = v.get('urlsafe_key', '') or v.get('__key__', '')
         if not urlsafe_key:
           ref = self._original_class.from_dict(v)
         else:
@@ -617,7 +617,7 @@ class ReferenceProperty(StructuredProperty):
       if not isinstance(value, dict):
         raise datastore_errors.BadValueError('Expected dict, got %r.'
                                              % (value,))
-      urlsafe_key = value.get('urlsafe_key', '') or value.get('$$key$$',
+      urlsafe_key = value.get('urlsafe_key', '') or value.get('__key__',
                                                               '')
       if not urlsafe_key:
         ref = self._original_class.from_dict(value)

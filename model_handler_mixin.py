@@ -246,8 +246,8 @@ class ModelHandlerMixin(object):
     input'''
     self._pre_post_hook()
     new_entity_json = self.extract_json()
-    new_entity_json.pop('$$key$$', None)
-    new_entity_json.pop('$$id$$', None)
+    new_entity_json.pop('__key__', None)
+    new_entity_json.pop('__id__', None)
     entity = self.create_model(**new_entity_json)
     entity.put()
     self._post_post_hook(entity)
