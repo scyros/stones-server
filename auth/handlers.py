@@ -169,6 +169,17 @@ class BaseOAuth2BeginHandler(OAuth2Conf):
     auth_url = service.get_authorization_url(come_back_to=come_back_to)
     return self.redirect(auth_url)
 
+  def post(self, provider=None):
+    oauth2_conf = self.get_provider_conf(provider)
+    redirect_uri = self.uri_for('oauth2.callback', provider=provider,
+                                _full=True)
+    service = oauth2.get_service(provider)(redirect_uri=redirect_uri,
+                                           **oauth2_conf)
+
+    come_back_to = self.request.get('come_back_to', '')
+    auth_url = service.get_authorization_url(come_back_to=come_back_to)
+    return self.response.write(auth_url)
+
 
 class BaseSignupHandler(WebAppBaseHandler):
   '''Signup Interface.'''

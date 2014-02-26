@@ -224,7 +224,7 @@ class OAuth2Service(object):
   display = ''
 
   def __init__(self, client_id, client_secret, request_token_uri,
-               access_token_uri, redirect_uri, scope, display=''):
+               access_token_uri, redirect_uri, scope, display='', **kwargs):
     self.client_id = client_id
     self.client_secret = client_secret
     self.request_token_uri = request_token_uri

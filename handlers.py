@@ -93,7 +93,8 @@ class BaseHandler(webapp2.RequestHandler):
     self.log_errors()
     self.response.content_type = 'application/json'
     if not self.app.debug:
-      del self.errors['Traceback']
+      for msg in self.errors['msgs']:
+        del msg['traceback']
     return self.response.write(
       webapp2_extras.json.encode(self.errors, ensure_ascii=False,
                                  cls=JSONEncoder)
@@ -199,9 +200,11 @@ class BaseHandler(webapp2.RequestHandler):
       self.response.status = 500
     tb = sys.exc_info()[-1]
     ret = {
-      'Error': exception.__class__.__name__,
-      'Msg': unicode(exception),
-      'Traceback': traceback.format_exc(tb),
+      'msgs': [{
+        'msg': '%s: %s' % (exception.__class__.__name__, unicode(exception)),
+        'level': 'error',
+        'traceback': traceback.format_exc(tb),
+      }]
     }
     return self.render_errors(ret)
 
