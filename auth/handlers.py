@@ -133,7 +133,7 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
     user_info = service.get_user_info(token)
     user_model = self.auth.store.user_model
     user = user_model.get_by_auth_id(':'.join([provider, user_info['email']]))
-    user_model = user
+    user_instance = user
     user = self.auth.store.user_to_dict(user)
     if not user:
       # creates a new one
@@ -151,7 +151,7 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
       else:
         raise AuthError('Username already taken.')
     else:
-      if not user_model.active:
+      if not user_instance.active:
         self.abort(401, 'Inactive User.')
       self.auth.set_session(user)
       if come_back_to:
