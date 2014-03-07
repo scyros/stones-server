@@ -18,20 +18,31 @@
 
 # Copyright 2013, Carlos León <carlos.eduardo.leon.franco@gmail.com>
 
+import os
 import datetime
 import logging
 import traceback
+import re
+import base64
+import random
+import string
+import calendar
+import time
 
 from google.appengine.ext import ndb
 from google.appengine.ext.ndb.model import _StructuredGetForDictMixin as ndb_StructuredGetForDictMixin
 from google.appengine.ext.ndb.google_imports import datastore_errors
 from google.appengine.api.users import User
+from google.appengine.ext import blobstore
+import cloudstorage as gcs
 
 logger = logging.getLogger(__name__)
 
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 DATE_FORMAT = '%Y-%m-%d'
 TIME_FORMAT = '%H:%M:%S'
+
+BASE64_HEADER_REGEX = re.compile("data:(\w*)/(.+);base64")
 
 
 def check_list(value):
@@ -171,24 +182,52 @@ class KeyProperty(ndb.KeyProperty, _SetFromDictPropertyMixin):
 
 class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
   '''BlobKeyProperty modifies.'''
-  # TODO: Check if value in _set_from_dict is base64encoded file and find a way
-  #       to convert it in BlobStore.
 
-  # def _set_from_dict(self, value):
-  #   def cast(val):
-  #     if isinstance(val, basestring):
-  #       if val
-  #       val = ndb.Key(urlsafe=val)
-  #     elif isinstance(val, dict):
-  #       if val.get('urlsafe_key', None):
-  #         val = ndb.Key(urlsafe=val['urlsafe_key'])
-  #       elif val.get('__key__', None):
-  #         val = ndb.Key(urlsafe=val['__key__'])
-  #     return val
+  def _set_from_dict(self, value):
+    def is_base64(val):
+      header = val.split(',')[0]
+      return bool(BASE64_HEADER_REGEX.search(header))
 
-  #   if self._repeated:
-  #     return [self._do_validate(cast(v)) for v in value]
-  #   return self._do_validate(cast(value))
+    def get_base64_content(val):
+      header, content = val.split(',')
+      return content
+
+    def get_base64_mimetype(val):
+      header = val.split(',')[0]
+      r = BASE64_HEADER_REGEX.search(header)
+      return '/'.join(r.groups())
+
+    def cast(val):
+      if isinstance(val, basestring):
+        try:
+          blob_key = blobstore.BlobKey(val)
+          return blob_key
+        except datastore_errors.BadValueError:
+          if len(val) > 500:
+            if is_base64(val):
+              mimetype = get_base64_mimetype(val)
+              base64_string = get_base64_content(val)
+              base64_decoded = base64.b64decode(base64_string)
+              base64_string = None
+              bucket = '/' + os.environ['BUCKET']
+              filename = bucket + '/'
+              filename += ''.join(
+                random.sample(string.ascii_letters + string.digits, 12))
+              filename += str(calendar.timegm(time.gmtime()))
+              with gcs.open(filename, 'w', content_type=mimetype) as gcs_file:
+                gcs_file.write(base64_decoded)
+              return blobstore.BlobKey(
+                blobstore.create_gs_key('/gs' + filename))
+            else:
+              raise datastore_errors.BadValueError('Expected string or BlobKey,'
+                                                   ' got %r.' % (value,))
+      else:
+        raise datastore_errors.BadValueError('Expected string or BlobKey, '
+                                             'got %r.' % (value,))
+
+    if self._repeated:
+      return [self._do_validate(cast(v)) for v in value]
+    return self._do_validate(cast(value))
 
 
 class UserProperty(ndb.UserProperty, _SetFromDictPropertyMixin):

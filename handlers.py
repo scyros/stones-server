@@ -21,6 +21,7 @@
 import logging
 import sys
 import traceback
+import base64
 
 import webapp2
 import webapp2_extras.jinja2
@@ -29,7 +30,9 @@ import webapp2_extras.auth
 import webapp2_extras.i18n
 
 from google.appengine.ext import ndb
-from google.appengine.api import users, namespace_manager
+from google.appengine.api import users
+from google.appengine.api import namespace_manager
+from google.appengine.ext import blobstore
 
 from .utils import *
 import oauth2
@@ -38,7 +41,9 @@ from .oauth2 import get_service
 from .model_handler_mixin import ModelHandlerMixin
 
 __all__ = ['BaseHandler', 'ModelHandlerMixin', 'NoKeyError',
-           'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return']
+           'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return',
+           'BlobHandler']
+
 logger = logging.getLogger(__name__)
 tasklet = ndb.tasklet
 Return = ndb.Return
@@ -293,3 +298,26 @@ class ConstantHandler(BaseHandler):
   def get(self):
     '''Returns a JSON format of a constant defined in 'constant' attribute.'''
     self.render_json([{'label': c[1], 'value': c[0]} for c in self.constant if c[1]])
+
+
+class BlobHandler(BaseHandler):
+  '''Handler to serve a blob.
+  The blob is served in base64 encoding; this encoding prevent browser cache.'''
+
+  def get(self, blob_key=None):
+    if not blob_key:
+      return self.abort(401, 'No blob key provided.')
+
+    try:
+      blob = blobstore.BlobKey(blob_key)
+      blob_info = blobstore.BlobInfo.get(blob)
+      if not blob_info:
+        raise Exception
+    except:
+      return self.abort(404, 'No model found.')
+
+    reader = blobstore.BlobReader(blob)
+    self.response.headers.add('Content-Tranfer-Encoding', 'base64')
+    self.response.content_type = str(blob_info.content_type)
+    self.response.write('data:%s;base64,' % blob_info.content_type)
+    self.response.write(base64.b64encode(reader.read()))

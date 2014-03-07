@@ -108,6 +108,8 @@ class JSONEncoder(json.JSONEncoder):
         'user_id': obj.user_id(),
         'nickname': obj.nickname(),
       }
+    elif isinstance(obj, blobstore.BlobKey):
+      return str(obj)
     else:
       return json.JSONEncoder.default(self, obj)
 
