@@ -44,7 +44,8 @@ from google.appengine.datastore import datastore_stub_util
 
 logger = logging.getLogger(__name__)
 __all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
-           'get_constants_choices', 'resize_image']
+           'get_constants_choices', 'resize_image', 'fix_base64_padding',
+           'get_random_string']
 
 
 def get_constant_display(constant, constants_group):
@@ -157,3 +158,17 @@ class BaseTestCase(unittest.TestCase):
 
   def tearDown(self):
     self.testbed.deactivate()
+
+
+def get_random_string(length=12):
+  '''Builds a given length random string.'''
+  return random.sample(string.letters + string.digits, length)
+
+
+def fix_base64_padding(s):
+  '''Fix base64 padding.'''
+  sb = s.rstrip()
+  missing_padding = 4 - len(sb) % 4
+  if missing_padding:
+    sb += '='* missing_padding
+  return sb

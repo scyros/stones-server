@@ -22,6 +22,8 @@ import logging
 import sys
 import traceback
 import base64
+import os
+import re
 
 import webapp2
 import webapp2_extras.jinja2
@@ -33,6 +35,8 @@ from google.appengine.ext import ndb
 from google.appengine.api import users
 from google.appengine.api import namespace_manager
 from google.appengine.ext import blobstore
+from google.appengine.api import app_identity
+import cloudstorage as gcs
 
 from .utils import *
 import oauth2
@@ -42,12 +46,12 @@ from .model_handler_mixin import ModelHandlerMixin
 
 __all__ = ['BaseHandler', 'ModelHandlerMixin', 'NoKeyError',
            'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return',
-           'BlobHandler']
+           'BlobHandler', 'ChunkedUploadHandler']
 
 logger = logging.getLogger(__name__)
 tasklet = ndb.tasklet
 Return = ndb.Return
-
+MULTIPART_REGEXP = re.compile('^multipart/form-data.*')
 
 class Error(Exception):
   '''Error baseclass.'''
@@ -321,3 +325,38 @@ class BlobHandler(BaseHandler):
     self.response.content_type = str(blob_info.content_type)
     self.response.write('data:%s;base64,' % blob_info.content_type)
     self.response.write(base64.b64encode(reader.read()))
+
+
+class ChunkedUploadHandler(BaseHandler):
+  '''Handles chunked uploads.
+  With this handler you can implement a resumable upload.'''
+
+  def get_range(self):
+    '''Extract range information.'''
+    range1, total_size = self.request.headers['Content-Range'].split('/')
+    range1 = range1[6:]
+    start, stop = range1.split('-')
+    return int(start), int(stop), int(total_size)
+
+  @webapp2.cached_property
+  def bucket_name(self):
+    return '/' + os.environ.get('GCS_BUCKET_NAME',
+                                app_identity.get_default_gcs_bucket_name())
+
+  def post(self):
+    multipart = MULTIPART_REGEXP.search(self.request.content_type)
+    start, stop, total_size = self.get_range()
+
+    if multipart:
+      key = self.request.POST.keys()[0]
+      field = self.request.POST[key]
+      filename = self.bucket_name + '/' + field.filename
+      with gcs.open(filename, 'w', content_type=field.type) as gcs_file:
+        content = fix_base64_padding(field.file.getvalue())
+        gcs_file.write(base64.b64decode(content))
+        logger.debug(gcs_file.tell())
+      blob_key = blobstore.BlobKey(blobstore.create_gs_key('/gs' + filename))
+
+    if stop < total_size:
+      self.response.status = 201
+    self.render_json({'blob_key': blob_key, 'length': 0})
