@@ -34,7 +34,6 @@ from google.appengine.ext.ndb.model import _StructuredGetForDictMixin as ndb_Str
 from google.appengine.ext.ndb.google_imports import datastore_errors
 from google.appengine.api.users import User
 from google.appengine.ext import blobstore
-import cloudstorage as gcs
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +213,9 @@ class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
               filename += ''.join(
                 random.sample(string.ascii_letters + string.digits, 12))
               filename += str(calendar.timegm(time.gmtime()))
+
+              import cloudstorage as gcs
+
               with gcs.open(filename, 'w', content_type=mimetype) as gcs_file:
                 gcs_file.write(base64_decoded)
               return blobstore.BlobKey(

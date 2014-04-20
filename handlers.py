@@ -36,7 +36,6 @@ from google.appengine.api import users
 from google.appengine.api import namespace_manager
 from google.appengine.ext import blobstore
 from google.appengine.api import app_identity
-import cloudstorage as gcs
 
 from .utils import *
 import oauth2
@@ -344,6 +343,8 @@ class ChunkedUploadHandler(BaseHandler):
                                 app_identity.get_default_gcs_bucket_name())
 
   def post(self):
+    import cloudstorage as gcs
+
     multipart = MULTIPART_REGEXP.search(self.request.content_type)
     start, stop, total_size = self.get_range()
 
