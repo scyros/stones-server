@@ -203,11 +203,13 @@ class ModelHandlerMixin(object):
         # retrieved
         limit = self.limit(kwargs.get('l', None))
         if not page_size is None:
+          limit = page_size
           if not page is None:
-            entities = get_entities(qry, limit=limit, page=page).get_result()
+            entities = get_entities(qry, limit=limit, page_size=page_size,
+                                    page=page).get_result()
             entities = {
               'entities': entities,
-              'total_pages': (qry.count() / page_size) + 1,
+              'total_pages': ((qry.count() - 1) / page_size) + 1,
               'page_size': page_size,
               'current_page': page,
             }
@@ -217,7 +219,7 @@ class ModelHandlerMixin(object):
               start_cursor=cursor).get_result()
             entities = {
               'entities': entities,
-              'total_pages': (qry.count() / page_size) + 1,
+              'total_pages': ((qry.count() - 1) / page_size) + 1,
               'page_size': page_size,
               'cursor': cursor and cursor.urlsafe() or None,
             }
