@@ -21,6 +21,9 @@
 import logging
 import sys
 import traceback
+import base64
+import os
+import re
 
 import webapp2
 import webapp2_extras.jinja2
@@ -29,7 +32,11 @@ import webapp2_extras.auth
 import webapp2_extras.i18n
 
 from google.appengine.ext import ndb
-from google.appengine.api import users, namespace_manager
+from google.appengine.api import users
+from google.appengine.api import namespace_manager
+from google.appengine.ext import blobstore
+from google.appengine.api import app_identity
+import cloudstorage as gcs
 
 from .utils import *
 import oauth2
@@ -38,11 +45,13 @@ from .oauth2 import get_service
 from .model_handler_mixin import ModelHandlerMixin
 
 __all__ = ['BaseHandler', 'ModelHandlerMixin', 'NoKeyError',
-           'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return']
+           'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return',
+           'BlobHandler', 'ChunkedUploadHandler']
+
 logger = logging.getLogger(__name__)
 tasklet = ndb.tasklet
 Return = ndb.Return
-
+MULTIPART_REGEXP = re.compile('^multipart/form-data.*')
 
 class Error(Exception):
   '''Error baseclass.'''
@@ -93,7 +102,8 @@ class BaseHandler(webapp2.RequestHandler):
     self.log_errors()
     self.response.content_type = 'application/json'
     if not self.app.debug:
-      del self.errors['Traceback']
+      for msg in self.errors['msgs']:
+        del msg['traceback']
     return self.response.write(
       webapp2_extras.json.encode(self.errors, ensure_ascii=False,
                                  cls=JSONEncoder)
@@ -199,9 +209,11 @@ class BaseHandler(webapp2.RequestHandler):
       self.response.status = 500
     tb = sys.exc_info()[-1]
     ret = {
-      'Error': exception.__class__.__name__,
-      'Msg': unicode(exception),
-      'Traceback': traceback.format_exc(tb),
+      'msgs': [{
+        'msg': '%s: %s' % (exception.__class__.__name__, unicode(exception)),
+        'level': 'error',
+        'traceback': traceback.format_exc(tb),
+      }]
     }
     return self.render_errors(ret)
 
@@ -233,15 +245,18 @@ class BaseHandler(webapp2.RequestHandler):
     _dispatch = False
     if self.users_allowed:
       if self.user:
-        try:
-          for type in self.user.type:
-            _dispatch = _dispatch or type in self.users_allowed
-            if _dispatch:
-              break
-          _dispatch = _dispatch or \
-            self.user.get_id() in self.users_allowed
-        except AttributeError:
-          _dispatch = False
+        if 'superhero' in self.user.type:
+          _dispatch = True
+        else:
+          try:
+            for type in self.user.type:
+              _dispatch = _dispatch or type in self.users_allowed
+              if _dispatch:
+                break
+            _dispatch = _dispatch or \
+              self.user.get_id() in self.users_allowed
+          except AttributeError:
+            _dispatch = False
     else:
       _dispatch = True
 
@@ -287,3 +302,61 @@ class ConstantHandler(BaseHandler):
   def get(self):
     '''Returns a JSON format of a constant defined in 'constant' attribute.'''
     self.render_json([{'label': c[1], 'value': c[0]} for c in self.constant if c[1]])
+
+
+class BlobHandler(BaseHandler):
+  '''Handler to serve a blob.
+  The blob is served in base64 encoding; this encoding prevent browser cache.'''
+
+  def get(self, blob_key=None):
+    if not blob_key:
+      return self.abort(401, 'No blob key provided.')
+
+    try:
+      blob = blobstore.BlobKey(blob_key)
+      blob_info = blobstore.BlobInfo.get(blob)
+      if not blob_info:
+        raise Exception
+    except:
+      return self.abort(404, 'No model found.')
+
+    reader = blobstore.BlobReader(blob)
+    self.response.headers.add('Content-Tranfer-Encoding', 'base64')
+    self.response.content_type = str(blob_info.content_type)
+    self.response.write('data:%s;base64,' % blob_info.content_type)
+    self.response.write(base64.b64encode(reader.read()))
+
+
+class ChunkedUploadHandler(BaseHandler):
+  '''Handles chunked uploads.
+  With this handler you can implement a resumable upload.'''
+
+  def get_range(self):
+    '''Extract range information.'''
+    range1, total_size = self.request.headers['Content-Range'].split('/')
+    range1 = range1[6:]
+    start, stop = range1.split('-')
+    return int(start), int(stop), int(total_size)
+
+  @webapp2.cached_property
+  def bucket_name(self):
+    return '/' + os.environ.get('GCS_BUCKET_NAME',
+                                app_identity.get_default_gcs_bucket_name())
+
+  def post(self):
+    multipart = MULTIPART_REGEXP.search(self.request.content_type)
+    start, stop, total_size = self.get_range()
+
+    if multipart:
+      key = self.request.POST.keys()[0]
+      field = self.request.POST[key]
+      filename = self.bucket_name + '/' + field.filename
+      with gcs.open(filename, 'w', content_type=field.type) as gcs_file:
+        content = fix_base64_padding(field.file.getvalue())
+        gcs_file.write(base64.b64decode(content))
+        logger.debug(gcs_file.tell())
+      blob_key = blobstore.BlobKey(blobstore.create_gs_key('/gs' + filename))
+
+    if stop < total_size:
+      self.response.status = 201
+    self.render_json({'blob_key': blob_key, 'length': 0})

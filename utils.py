@@ -44,7 +44,8 @@ from google.appengine.datastore import datastore_stub_util
 
 logger = logging.getLogger(__name__)
 __all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
-           'get_constants_choices', 'resize_image']
+           'get_constants_choices', 'resize_image', 'fix_base64_padding',
+           'get_random_string']
 
 
 def get_constant_display(constant, constants_group):
@@ -95,10 +96,10 @@ class JSONEncoder(json.JSONEncoder):
       return unicode(obj)
     elif isinstance(obj, ndb.Model):
       our_dict = obj.to_dict()
-      if not '$$key$$' in our_dict and obj.key:
-        our_dict['$$key$$'] = obj.key.urlsafe()
-      if not '$$id$$' in our_dict and obj.key:
-        our_dict['$$id$$'] = obj.key.id()
+      if not '__key__' in our_dict and obj.key:
+        our_dict['__key__'] = obj.key.urlsafe()
+      if not '__id__' in our_dict and obj.key:
+        our_dict['__id__'] = obj.key.id()
       return our_dict
     elif isinstance(obj, model.Key):
       return obj.urlsafe()
@@ -108,6 +109,8 @@ class JSONEncoder(json.JSONEncoder):
         'user_id': obj.user_id(),
         'nickname': obj.nickname(),
       }
+    elif isinstance(obj, blobstore.BlobKey):
+      return str(obj)
     else:
       return json.JSONEncoder.default(self, obj)
 
@@ -155,3 +158,17 @@ class BaseTestCase(unittest.TestCase):
 
   def tearDown(self):
     self.testbed.deactivate()
+
+
+def get_random_string(length=12):
+  '''Builds a given length random string.'''
+  return random.sample(string.letters + string.digits, length)
+
+
+def fix_base64_padding(s):
+  '''Fix base64 padding.'''
+  sb = s.rstrip()
+  missing_padding = 4 - len(sb) % 4
+  if missing_padding:
+    sb += '='* missing_padding
+  return sb

@@ -16,6 +16,7 @@ class BaseUser(Webapp2_user, stones.Expando):
   '''Base User model.'''
   created = stones.DateTimeProperty(auto_now_add=True)
   updated = stones.DateTimeProperty(auto_now=True)
+  active = stones.BooleanProperty(default=True)
   confirmed = stones.DateTimeProperty()
   # ID for third party authentication, e.g. 'google:username'. UNIQUE.
   auth_ids = stones.StringProperty(repeated=True)
@@ -32,7 +33,7 @@ class BaseUser(Webapp2_user, stones.Expando):
     return [
       ('u', ''),
       ('admin', 'admin'),
-      ('superhero', 'superhero'),
+      ('superhero', ''),
     ]
 
   def __unicode__(self):

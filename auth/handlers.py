@@ -133,6 +133,7 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
     user_info = service.get_user_info(token)
     user_model = self.auth.store.user_model
     user = user_model.get_by_auth_id(':'.join([provider, user_info['email']]))
+    user_instance = user
     user = self.auth.store.user_to_dict(user)
     if not user:
       # creates a new one
@@ -150,6 +151,8 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
       else:
         raise AuthError('Username already taken.')
     else:
+      if not user_instance.active:
+        self.abort(401, 'Inactive User.')
       self.auth.set_session(user)
       if come_back_to:
         return self.redirect(come_back_to)
@@ -168,6 +171,17 @@ class BaseOAuth2BeginHandler(OAuth2Conf):
     come_back_to = self.request.get('come_back_to', '')
     auth_url = service.get_authorization_url(come_back_to=come_back_to)
     return self.redirect(auth_url)
+
+  def post(self, provider=None):
+    oauth2_conf = self.get_provider_conf(provider)
+    redirect_uri = self.uri_for('oauth2.callback', provider=provider,
+                                _full=True)
+    service = oauth2.get_service(provider)(redirect_uri=redirect_uri,
+                                           **oauth2_conf)
+
+    come_back_to = self.request.get('come_back_to', '')
+    auth_url = service.get_authorization_url(come_back_to=come_back_to)
+    return self.response.write(auth_url)
 
 
 class BaseSignupHandler(WebAppBaseHandler):
@@ -489,6 +503,10 @@ class BaseLoginHandler(WebAppBaseHandler):
     try:
       user = self.auth.get_user_by_password(':'.join(['own', username]),
         password)
+      if user.get('user_id'):
+        user_model = self.auth.store.user_model.get_by_id(user['user_id'])
+        if not user_model.active:
+          raise webapp2_extras.auth.InvalidAuthIdError
       self.auth.set_session(user)
       return self.redirect_to('home')
     except (webapp2_extras.auth.InvalidAuthIdError,
@@ -526,6 +544,10 @@ class BaseUserModelHandler(stones.BaseHandler, stones.ModelHandlerMixin):
     for attr in rejected_attrs:
       model_args.pop(attr, None)
     super(BaseUserModelHandler, self).update_model(_entity, **model_args)
+
+  def model_delete(self, entity):
+    entity.active = False
+    entity.put_async()
 
 
 class BaseUserTypesHandler(stones.ConstantHandler):
