@@ -34,6 +34,7 @@ from google.appengine.ext.ndb.model import _StructuredGetForDictMixin as ndb_Str
 from google.appengine.ext.ndb.google_imports import datastore_errors
 from google.appengine.api.users import User
 from google.appengine.ext import blobstore
+from google.appengine.api import app_identity
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,8 @@ class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
               base64_string = get_base64_content(val)
               base64_decoded = base64.b64decode(base64_string)
               base64_string = None
-              bucket = '/' + os.environ['BUCKET']
+              bucket = '/' + os.environ.get('GCS_BUCKET_NAME',
+                app_identity.get_default_gcs_bucket_name())
               filename = bucket + '/'
               filename += ''.join(
                 random.sample(string.ascii_letters + string.digits, 12))
