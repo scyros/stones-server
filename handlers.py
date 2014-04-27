@@ -36,6 +36,11 @@ from google.appengine.api import users
 from google.appengine.api import namespace_manager
 from google.appengine.ext import blobstore
 from google.appengine.api import app_identity
+from google.appengine.api import urlfetch
+from google.appengine.api import memcache
+
+import cloudstorage as gcs
+import cloudstorage.storage_api as cloud_storage_api
 
 from .utils import *
 import oauth2
@@ -50,7 +55,6 @@ __all__ = ['BaseHandler', 'ModelHandlerMixin', 'NoKeyError',
 logger = logging.getLogger(__name__)
 tasklet = ndb.tasklet
 Return = ndb.Return
-MULTIPART_REGEXP = re.compile('^multipart/form-data.*')
 
 class Error(Exception):
   '''Error baseclass.'''
@@ -330,6 +334,30 @@ class ChunkedUploadHandler(BaseHandler):
   '''Handles chunked uploads.
   With this handler you can implement a resumable upload.'''
 
+  @property
+  def base_path(self):
+    '''Gets base path to make requests against Google Cloud Storage.'''
+    def local():
+      server_software = os.environ.get('SERVER_SOFTWARE')
+      if server_software is None:
+        return True
+      if 'remote_api' in server_software:
+        return False
+      if server_software.startswith(('Development', 'testutil')):
+        return True
+      return False
+
+    if local():
+      return self.request.host_url + '/_ah/gcs'
+    else:
+      return 'https://www.googleapis.com/upload/storage/v1beta2/b'
+
+
+  def get_access_token(self):
+    '''Get OAuth2 access token to sign requests.'''
+    scopes = 'https://www.googleapis.com/auth/devstorage.read_write'
+    return app_identity.get_access_token(scopes)
+
   def get_range(self):
     '''Extract range information.'''
     range1, total_size = self.request.headers['Content-Range'].split('/')
@@ -339,25 +367,118 @@ class ChunkedUploadHandler(BaseHandler):
 
   @webapp2.cached_property
   def bucket_name(self):
-    return '/' + os.environ.get('GCS_BUCKET_NAME',
-                                app_identity.get_default_gcs_bucket_name())
+    return os.environ.get('GCS_BUCKET_NAME',
+                          app_identity.get_default_gcs_bucket_name())
 
   def post(self):
-    import cloudstorage as gcs
-
-    multipart = MULTIPART_REGEXP.search(self.request.content_type)
     start, stop, total_size = self.get_range()
+    assert start == 0
+    last = stop == total_size - 1
 
-    if multipart:
-      key = self.request.POST.keys()[0]
-      field = self.request.POST[key]
-      filename = self.bucket_name + '/' + field.filename
-      with gcs.open(filename, 'w', content_type=field.type) as gcs_file:
-        content = fix_base64_padding(field.file.getvalue())
-        gcs_file.write(base64.b64decode(content))
-        logger.debug(gcs_file.tell())
-      blob_key = blobstore.BlobKey(blobstore.create_gs_key('/gs' + filename))
+    filename = self.request.get('filename', get_random_string(18))
 
-    if stop < total_size:
+    access_token, _ = self.get_access_token()
+    url = '%s/%s/%s/o?uploadType=resumable' % (self.base_path, self.bucket_name,
+      filename)
+    headers = {
+      'Authorization': 'Bearer %s' % access_token,
+      'Content-Type': self.request.content_type,
+    }
+    init = urlfetch.fetch(url=url, headers=headers, method=urlfetch.POST)
+    if init.status_code == 201:
+      session = init.headers['Location']
+      mem_key = '%s|%s' % ('GCS-Sessions', filename)
+      memcache.add(key=mem_key, value=session)
+
+      upload_headers = {
+        'Authorization': 'Bearer %s' % access_token,
+        'Content-Type': self.request.content_type,
+        'Content-Range': 'bytes %s-%s/*' % (start, stop),
+      }
+      if last:
+        upload_headers['Content-Range'] = 'bytes %s-%s/%s' % (start, stop, total_size)
+      upload_content = fix_base64_padding(self.request.body)
+      upload_content = base64.b64decode(upload_content)
+      upload = urlfetch.fetch(url=session, method=urlfetch.PUT,
+        payload=upload_content, headers=upload_headers)
+      if upload.status_code == 308:
+        self.render_json({
+          'filename': filename,
+          'start': start,
+          'stop': stop,
+          'lenght': stop - start - 1,
+          'key': blobstore.create_gs_key('/gs/%s/%s' % (self.bucket_name, filename)),
+        })
+        self.response.status = 201
+      elif upload.status_code == 200:
+        if not last:
+          pass # ??? no debería
+        self.render_json({
+          'filename': filename,
+          'start': start,
+          'stop': stop,
+          'lenght': stop - start - 1,
+          'key': blobstore.create_gs_key('/gs/%s/%s' % (self.bucket_name, filename)),
+        })
+        self.response.status = 200
+        memcache.delete(mem_key)
+      else:
+        logger.error('An error has ocurred while trying to upload. Try again.')
+        logger.error('Status code %s: %s' % (upload.status_code, upload.content))
+        return self.abort(500, 'An error has ocurred while trying to upload. Try again.')
+    else:
+      logger.error('Impossible to create a new file in Google Cloud Storage.')
+      logger.error('Status code %s: %s' % (init.status_code, init.content))
+      return self.abort(507,
+        'Impossible to create a new file in Google Cloud Storage.')
+
+  def put(self):
+    start, stop, total_size = self.get_range()
+    last = stop == total_size - 1
+
+    filename = self.request.get('filename')
+    if not filename:
+      return self.abort(412, 'Filename is mandatory.')
+
+    mem_key = '%s|%s' % ('GCS-Sessions', filename)
+    session = memcache.get(mem_key)
+    if not session:
+      return self.abort(404, 'Upload session not found.')
+
+    access_token, _ = self.get_access_token()
+    upload_headers = {
+      'Authorization': 'Bearer %s' % access_token,
+      'Content-Type': self.request.content_type,
+      'Content-Range': 'bytes %s-%s/*' % (start, stop),
+    }
+    if last:
+      upload_headers['Content-Range'] = 'bytes %s-%s/%s' % (start, stop, total_size)
+    upload_content = fix_base64_padding(self.request.body)
+    upload_content = base64.b64decode(upload_content)
+    upload = urlfetch.fetch(url=session, method=urlfetch.PUT,
+      payload=upload_content, headers=upload_headers)
+    if upload.status_code == 308:
+      self.render_json({
+        'filename': filename,
+        'start': start,
+        'stop': stop,
+        'lenght': stop - start - 1,
+        'key': blobstore.create_gs_key('/gs/%s/%s' % (self.bucket_name, filename)),
+      })
       self.response.status = 201
-    self.render_json({'blob_key': blob_key, 'length': 0})
+    elif upload.status_code == 200:
+      if not last:
+        pass # ??? no debería
+      self.render_json({
+        'filename': filename,
+        'start': start,
+        'stop': stop,
+        'lenght': stop - start - 1,
+        'key': blobstore.create_gs_key('/gs/%s/%s' % (self.bucket_name, filename)),
+      })
+      self.response.status = 200
+      memcache.delete(mem_key)
+    else:
+      logger.error('An error has ocurred while trying to upload. Try again.')
+      logger.error('Status code %s: %s' % (upload.status_code, upload.content))
+      return self.abort(500, 'An error has ocurred while trying to upload. Try again.')
