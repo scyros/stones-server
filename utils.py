@@ -34,6 +34,7 @@ from google.appengine.ext import blobstore
 from google.appengine.api import files
 from google.appengine.api import users as google_users
 from google.appengine.api import images
+from google.appengine.api import datastore_types
 from babel.support import LazyProxy
 import model
 
@@ -111,6 +112,11 @@ class JSONEncoder(json.JSONEncoder):
       }
     elif isinstance(obj, blobstore.BlobKey):
       return str(obj)
+    elif isinstance(obj, datastore_types.GeoPt):
+      return {
+        'lat': obj.lat,
+        'lon': obj.lon
+      }
     else:
       return json.JSONEncoder.default(self, obj)
 

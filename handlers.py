@@ -24,6 +24,8 @@ import traceback
 import base64
 import os
 import re
+import urllib
+import hashlib
 
 import webapp2
 import webapp2_extras.jinja2
@@ -48,9 +50,16 @@ from .oauth2 import get_service
 
 from .model_handler_mixin import ModelHandlerMixin
 
-__all__ = ['BaseHandler', 'ModelHandlerMixin', 'NoKeyError',
-           'UserIdentifierUsedError', 'ConstantHandler', 'tasklet', 'Return',
-           'BlobHandler', 'ChunkedUploadHandler']
+__all__ = ['BaseHandler',
+           'ModelHandlerMixin',
+           'NoKeyError',
+           'UserIdentifierUsedError',
+           'ConstantHandler',
+           'tasklet',
+           'Return',
+           'BlobHandler',
+           'ChunkedUploadHandler',
+           'GeocodingHandler']
 
 logger = logging.getLogger(__name__)
 tasklet = ndb.tasklet
@@ -482,3 +491,79 @@ class ChunkedUploadHandler(BaseHandler):
       logger.error('An error has ocurred while trying to upload. Try again.')
       logger.error('Status code %s: %s' % (upload.status_code, upload.content))
       return self.abort(500, 'An error has ocurred while trying to upload. Try again.')
+
+
+class GeocodingHandler(BaseHandler):
+  '''Handler to manage geocoding requests.
+
+  We use Google Maps to perform geocoding. Also we use memcache to cache Google
+  maps responses.'''
+
+  def get_memcache_key(self, **kwargs):
+    '''Calculate memcache key.'''
+    h = hashlib.md5()
+    for key, value in kwargs.iteritems():
+      h.update(value)
+    return h.hexdigest()
+
+  def get(self):
+    search_term = self.request.get('q')
+    if not search_term:
+      return self.abort(404)
+
+    if len(search_term) < 3:
+      return self.abort(412, 'Search term is too short.')
+
+    google_maps_key = self.app.config.load_config('GOOGLE_APIS')
+    if google_maps_key:
+      google_maps_key = google_maps_key.get('key', None)
+    else:
+      google_maps_key = None
+
+    components = self.request.get('c', '')
+    region = self.request.get('r', '')
+    language = 'es'  # TODO: detect language from headers
+
+    params = {
+      'sensor': 'false',
+      'address': search_term.encode('utf-8'),
+    }
+    if components:
+      params['components'] = components
+    if region:
+      params['region'] = region
+    # if google_maps_key:
+    #   params['key'] = google_maps_key
+    if language:
+      params['language'] = language
+
+    cached = memcache.get(
+      'GOOGLE_MAPS_GEOCODING|%s' % self.get_memcache_key(**params))
+    if cached:
+      return self.render_json(cached)
+    else:
+      url = 'http://maps.googleapis.com/maps/api/geocode/json?%s'
+      url = url % urllib.urlencode(params)
+      req = urlfetch.fetch(url)
+      logger.info('Fetching from Google Maps...')
+
+      if req.status_code == 200:
+        result = self.decode_json(req.content)
+
+        if result['status'] == 'OK':
+          memcache.add(
+            'GOOGLE_MAPS_GEOCODING|%s' % self.get_memcache_key(**params),
+            result['results'],
+            60 * 60 * 24 * 7)  # keep it for 7 days
+          return self.render_json(result['results'])
+        elif result['status'] == 'ZERO_RESULTS':
+          return self.render_json([])
+        else:
+          logger.warning('Impossible to retrieve geocodes.')
+          logger.warning('Response code: %s' % result['status'])
+          return self.abort(500)
+      else:
+        logger.warning('Impossible to retrieve geocodes.')
+        logger.warning('Status code: %s' % req.status_code)
+        logger.warning('Reason: %s' % req.content)
+        return self.abort(500)
