@@ -47,7 +47,7 @@ from google.appengine.datastore import datastore_stub_util
 logger = logging.getLogger(__name__)
 __all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
            'get_constants_choices', 'resize_image', 'fix_base64_padding',
-           'get_random_string', 'decode_json']
+           'get_random_string', 'decode_json', 'encode_json']
 
 
 def get_constant_display(constant, constants_group):
@@ -183,3 +183,9 @@ def fix_base64_padding(s):
 def decode_json(json_string):
   '''Decode a string that represents a JSON.'''
   return webapp2_extras.json.decode(json_string)
+
+
+def encode_json(jsonable, **kwargs):
+  '''Encode a dict in JSON format.'''
+  return webapp2_extras.json.encode(jsonable, ensure_ascii=False,
+                                    cls=JSONEncoder, **kwargs)

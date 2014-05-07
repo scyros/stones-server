@@ -46,6 +46,7 @@ TIME_FORMAT = '%H:%M:%S'
 
 BASE64_HEADER_REGEX = re.compile("data:(\w*)/(.+);base64")
 URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
+LOCAL_URL_REGEX = re.compile("/(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
 
 
 def check_list(value):
@@ -64,15 +65,15 @@ class _SetFromDictPropertyMixin(object):
     return self._do_validate(value)
 
 
-class GenericProperty(ndb.GenericProperty, _SetFromDictPropertyMixin):
+class GenericProperty(_SetFromDictPropertyMixin, ndb.GenericProperty):
   '''GenericProperty modified.'''
 
 
-class StringProperty(ndb.StringProperty, _SetFromDictPropertyMixin):
+class StringProperty(_SetFromDictPropertyMixin, ndb.StringProperty):
   '''StringProperty modified.'''
 
 
-class IntegerProperty(ndb.IntegerProperty, _SetFromDictPropertyMixin):
+class IntegerProperty(_SetFromDictPropertyMixin, ndb.IntegerProperty):
   ''''IntegerProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -83,7 +84,7 @@ class IntegerProperty(ndb.IntegerProperty, _SetFromDictPropertyMixin):
     return self._do_validate(int(value))
 
 
-class FloatProperty(ndb.FloatProperty, _SetFromDictPropertyMixin):
+class FloatProperty(_SetFromDictPropertyMixin, ndb.FloatProperty):
   '''FloatProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -94,7 +95,7 @@ class FloatProperty(ndb.FloatProperty, _SetFromDictPropertyMixin):
     return self._do_validate(float(value))
 
 
-class BooleanProperty(ndb.BooleanProperty, _SetFromDictPropertyMixin):
+class BooleanProperty(_SetFromDictPropertyMixin, ndb.BooleanProperty):
   '''BooleanProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -110,11 +111,11 @@ class BooleanProperty(ndb.BooleanProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class TextProperty(ndb.TextProperty, _SetFromDictPropertyMixin):
+class TextProperty(_SetFromDictPropertyMixin, ndb.TextProperty):
     '''TextProperty modified.'''
 
 
-class BlobProperty(ndb.BlobProperty, _SetFromDictPropertyMixin):
+class BlobProperty(_SetFromDictPropertyMixin, ndb.BlobProperty):
   '''BlobProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -125,11 +126,11 @@ class BlobProperty(ndb.BlobProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class JsonProperty(ndb.JsonProperty, _SetFromDictPropertyMixin):
+class JsonProperty(_SetFromDictPropertyMixin, ndb.JsonProperty):
   '''JsonProperty modified.'''
 
 
-class DateProperty(ndb.DateProperty, _SetFromDictPropertyMixin):
+class DateProperty(_SetFromDictPropertyMixin, ndb.DateProperty):
   '''DateProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -143,7 +144,7 @@ class DateProperty(ndb.DateProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class DateTimeProperty(ndb.DateTimeProperty, _SetFromDictPropertyMixin):
+class DateTimeProperty(_SetFromDictPropertyMixin, ndb.DateTimeProperty):
   ''''DateTimeProperty modified.'''
   def _set_from_dict(self, value):
     if isinstance(value, basestring):
@@ -151,7 +152,7 @@ class DateTimeProperty(ndb.DateTimeProperty, _SetFromDictPropertyMixin):
     return self._do_validate(value)
 
 
-class TimeProperty(ndb.TimeProperty, _SetFromDictPropertyMixin):
+class TimeProperty(_SetFromDictPropertyMixin, ndb.TimeProperty):
   '''TimeProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -165,7 +166,7 @@ class TimeProperty(ndb.TimeProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class KeyProperty(ndb.KeyProperty, _SetFromDictPropertyMixin):
+class KeyProperty(_SetFromDictPropertyMixin, ndb.KeyProperty):
   '''KeyProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -183,7 +184,7 @@ class KeyProperty(ndb.KeyProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
+class BlobKeyProperty(_SetFromDictPropertyMixin, ndb.BlobKeyProperty):
   '''BlobKeyProperty modifies.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -289,6 +290,8 @@ class GCSBlobProperty(StringProperty):
           return None
         elif URL_REGEX.findall(val):
           return val
+        elif LOCAL_URL_REGEX.findall(val):
+          return val
         else:
           raise datastore_errors.BadValueError('Expected Base64 string or '
                                                'URL, got %r.' % val)
@@ -300,7 +303,7 @@ class GCSBlobProperty(StringProperty):
     return self._do_validate(cast(value))
 
 
-class UserProperty(ndb.UserProperty, _SetFromDictPropertyMixin):
+class UserProperty(_SetFromDictPropertyMixin, ndb.UserProperty):
   '''UserProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -315,13 +318,13 @@ class UserProperty(ndb.UserProperty, _SetFromDictPropertyMixin):
     return self._do_validate(cast(value))
 
 
-class ComputedProperty(ndb.ComputedProperty, _SetFromDictPropertyMixin):
+class ComputedProperty(_SetFromDictPropertyMixin, ndb.ComputedProperty):
   '''ComputedProperty modified.'''
   def _set_from_dict(self, value):
     return None
 
 
-class GeoPtProperty(ndb.GeoPtProperty, _SetFromDictPropertyMixin):
+class GeoPtProperty(_SetFromDictPropertyMixin, ndb.GeoPtProperty):
   '''GeoPtProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -354,7 +357,7 @@ class _StructuredSetFromDictMixin(object):
       return self._modelclass.from_dict(value)
 
 
-class StructuredProperty(ndb.StructuredProperty, _StructuredSetFromDictMixin):
+class StructuredProperty(_StructuredSetFromDictMixin, ndb.StructuredProperty):
   '''StructuredProperty modified.'''
 
 
