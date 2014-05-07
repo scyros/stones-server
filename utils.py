@@ -29,6 +29,7 @@ except ImportError:
   import json
 
 import webapp2
+import webapp2_extras.json
 from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import files
@@ -46,7 +47,7 @@ from google.appengine.datastore import datastore_stub_util
 logger = logging.getLogger(__name__)
 __all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
            'get_constants_choices', 'resize_image', 'fix_base64_padding',
-           'get_random_string']
+           'get_random_string', 'decode_json']
 
 
 def get_constant_display(constant, constants_group):
@@ -168,7 +169,7 @@ class BaseTestCase(unittest.TestCase):
 
 def get_random_string(length=12):
   '''Builds a given length random string.'''
-  return random.sample(string.letters + string.digits, length)
+  return ''.join(random.sample(string.letters + string.digits, length))
 
 
 def fix_base64_padding(s):
@@ -178,3 +179,7 @@ def fix_base64_padding(s):
   if missing_padding:
     sb += '='* missing_padding
   return sb
+
+def decode_json(json_string):
+  '''Decode a string that represents a JSON.'''
+  return webapp2_extras.json.decode(json_string)

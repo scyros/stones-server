@@ -21,7 +21,6 @@
 import os
 import datetime
 import logging
-import traceback
 import re
 import base64
 import random
@@ -35,6 +34,9 @@ from google.appengine.ext.ndb.google_imports import datastore_errors
 from google.appengine.api.users import User
 from google.appengine.ext import blobstore
 from google.appengine.api import app_identity
+from google.appengine.api import urlfetch
+
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ DATE_FORMAT = '%Y-%m-%d'
 TIME_FORMAT = '%H:%M:%S'
 
 BASE64_HEADER_REGEX = re.compile("data:(\w*)/(.+);base64")
+URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
 
 
 def check_list(value):
@@ -182,52 +185,115 @@ class KeyProperty(ndb.KeyProperty, _SetFromDictPropertyMixin):
 
 class BlobKeyProperty(ndb.BlobKeyProperty, _SetFromDictPropertyMixin):
   '''BlobKeyProperty modifies.'''
-
   def _set_from_dict(self, value):
-    def is_base64(val):
-      header = val.split(',')[0]
-      return bool(BASE64_HEADER_REGEX.search(header))
-
-    def get_base64_content(val):
-      header, content = val.split(',')
-      return content
-
-    def get_base64_mimetype(val):
-      header = val.split(',')[0]
-      r = BASE64_HEADER_REGEX.search(header)
-      return '/'.join(r.groups())
-
     def cast(val):
       if isinstance(val, basestring):
-        try:
-          blob_key = blobstore.BlobKey(val)
-          return blob_key
-        except datastore_errors.BadValueError:
-          if len(val) > 500:
-            if is_base64(val):
-              mimetype = get_base64_mimetype(val)
-              base64_string = get_base64_content(val)
-              base64_decoded = base64.b64decode(base64_string)
-              base64_string = None
-              bucket = '/' + os.environ.get('GCS_BUCKET_NAME',
-                app_identity.get_default_gcs_bucket_name())
-              filename = bucket + '/'
-              filename += ''.join(
-                random.sample(string.ascii_letters + string.digits, 12))
-              filename += str(calendar.timegm(time.gmtime()))
-
-              import cloudstorage as gcs
-
-              with gcs.open(filename, 'w', content_type=mimetype) as gcs_file:
-                gcs_file.write(base64_decoded)
-              return blobstore.BlobKey(
-                blobstore.create_gs_key('/gs' + filename))
-            else:
-              raise datastore_errors.BadValueError('Expected string or BlobKey,'
-                                                   ' got %r.' % (value,))
+        return blobstore.BlobKey(val)
       else:
-        raise datastore_errors.BadValueError('Expected string or BlobKey, '
-                                             'got %r.' % (value,))
+        raise datastore_errors.BadValueError('Expected string, got %r.' % val)
+
+    if self._repeated:
+      return [self._do_validate(cast(v)) for v in value]
+    return self._do_validate(cast(value))
+
+
+class GCSBlobProperty(StringProperty):
+  '''Property to store access URL to a Google Cloud Storage object.'''
+  def __init__(self, name, acl=None, *args, **kwargs):
+    super(GCSBlobProperty, self).__init__(name, *args, **kwargs)
+    self.acl = acl
+    if self.acl:
+      options = ('private', 'public-read', 'public-read-write',
+                 'authenticated-read', 'bucket-owner-read',
+                 'bucket-owner-full-control')
+      assert self.acl in options, 'Invalid ACL "%s"' % self.acl
+
+  def get_access_token(self):
+    '''Get OAuth2 access token to sign requests.'''
+    scopes = [
+      'https://www.googleapis.com/auth/devstorage.read_write',
+      'https://www.googleapis.com/auth/devstorage.full_control',
+      'https://www.googleapis.com/auth/devstorage.read_only',
+    ]
+    return app_identity.get_access_token(scopes)
+
+  @property
+  def _local(self):
+    server_software = os.environ.get('SERVER_SOFTWARE')
+    if server_software is None:
+      return True
+    if 'remote_api' in server_software:
+      return False
+    if server_software.startswith(('Development', 'testutil')):
+      return True
+    return False
+
+  @property
+  def base_path(self):
+    '''Gets base path to make requests against Google Cloud Storage.'''
+    if self._local:
+      return '/_ah/gcs'
+    else:
+      return 'https://www.googleapis.com/storage/v1/b'
+
+  def is_base64(self, value):
+    try:
+      header = value.split(',')[0]
+      return bool(BASE64_HEADER_REGEX.search(header))
+    except:
+      return False
+
+  def get_base64_content(self, value):
+    header, content = value.split(',')
+    return content
+
+  def get_base64_mimetype(self, value):
+    header = value.split(',')[0]
+    r = BASE64_HEADER_REGEX.search(header)
+    return '/'.join(r.groups())
+
+  def _set_from_dict(self, value):
+    def cast(val):
+      if isinstance(val, basestring):
+        if self.is_base64(val):
+          mimetype = self.get_base64_mimetype(val)
+          base64_string = self.get_base64_content(val)
+          base64_decoded = base64.b64decode(base64_string)
+          base64_string = None
+          bucket = os.environ.get('GCS_BUCKET_NAME',
+            app_identity.get_default_gcs_bucket_name())
+          filename = utils.get_random_string(12)
+          filename += str(calendar.timegm(time.gmtime()))
+
+          import cloudstorage as gcs
+
+          acl = None
+          if self.acl:
+            acl = {'x-goog-acl': self.acl}
+          with gcs.open('/%s/%s' % (bucket, filename), 'w',
+                        content_type=mimetype, options=acl) as gcs_file:
+            gcs_file.write(base64_decoded)
+
+          if self._local:
+            return '%s/%s/%s' % (self.base_path, bucket, filename)
+          access_token, _ = self.get_access_token()
+          medialink_url = '%s/%s/o/%s' % (self.base_path, bucket, filename)
+          medialink = urlfetch.fetch(
+            method=urlfetch.GET,
+            url=medialink_url,
+            headers={
+              'Authorization': 'Bearer %s' % access_token,
+            })
+          if medialink.status_code >= 200 and medialink.status_code < 300:
+            return utils.decode_json(medialink.content)['mediaLink']
+          return None
+        elif URL_REGEX.findall(val):
+          return val
+        else:
+          raise datastore_errors.BadValueError('Expected Base64 string or '
+                                               'URL, got %r.' % val)
+      else:
+        raise datastore_errors.BadValueError('Expected string, got %r.' % val)
 
     if self._repeated:
       return [self._do_validate(cast(v)) for v in value]
@@ -524,6 +590,7 @@ class Expando(ndb.Expando, Model):
         prop._set_value(self, value)
       else:
         setattr(self, key, value)
+
 
 class _ReferenceModel(Model):
   urlsafe_key = StringProperty('k')
