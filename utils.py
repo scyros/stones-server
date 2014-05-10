@@ -47,7 +47,7 @@ from google.appengine.datastore import datastore_stub_util
 logger = logging.getLogger(__name__)
 __all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
            'get_constants_choices', 'resize_image', 'fix_base64_padding',
-           'get_random_string', 'decode_json', 'encode_json']
+           'get_random_string', 'decode_json', 'encode_json', 'if_attr']
 
 
 def get_constant_display(constant, constants_group):
@@ -189,3 +189,16 @@ def encode_json(jsonable, **kwargs):
   '''Encode a dict in JSON format.'''
   return webapp2_extras.json.encode(jsonable, ensure_ascii=False,
                                     cls=JSONEncoder, **kwargs)
+
+def if_attr(obj, attr):
+  '''Check if attr exist in obj.
+
+    attr: string that represents attribute.
+  '''
+  parts = attr.split('.')
+  _obj = obj
+  for part in parts:
+    if not getattr(_obj, part, None):
+      return False
+    _obj = getattr(_obj, part, None)
+  return True

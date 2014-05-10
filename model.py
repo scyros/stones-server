@@ -331,7 +331,12 @@ class GeoPtProperty(_SetFromDictPropertyMixin, ndb.GeoPtProperty):
       if isinstance(val, (list, tuple, frozenset)):
         val = (val[0], val[1])
       elif isinstance(val, dict):
-        val = (val['lat'], val.get('lng', None) or val.get('lon', None))
+        try:
+          val = (val['lat'], val.get('lng', None) or val.get('lon', None))
+          if val[1] is None:  # no longitude found
+            raise KeyError
+        except KeyError:
+          raise datastore_errors.BadValueError('Missing latitude or longitude values.')
       return ndb.GeoPt(*val)
 
     if self._repeated:
@@ -346,7 +351,8 @@ class _StructuredSetFromDictMixin(object):
       check_list(value)
       _value = []
       for v in value:
-        _value.append(self._modelclass.from_dict(v))
+        if not v is None:
+          _value.append(self._modelclass.from_dict(v))
       return _value
     elif value is None:
       return None
