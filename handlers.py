@@ -189,7 +189,7 @@ class BaseHandler(webapp2.RequestHandler):
           auth_id = u'google:' + auth_id
           system_user = user_model.get_by_auth_id(auth_id)
     else:
-        system_user = user_model.get_by_id(system_user['user_id'])
+      system_user = user_model.get_by_id(system_user['user_id'])
 
     return system_user
 
@@ -340,6 +340,8 @@ class ChunkedUploadHandler(BaseHandler):
   '''Handles chunked uploads.
   With this handler you can implement a resumable upload.'''
 
+  acl = 'public-read'
+
   @webapp2.cached_property
   def _local(self):
     server_software = os.environ.get('SERVER_SOFTWARE')
@@ -396,6 +398,7 @@ class ChunkedUploadHandler(BaseHandler):
         self.base_path, self.bucket_name, filename)
     init_headers = {
       'Authorization': 'Bearer %s' % access_token,
+      'x-goog-acl': self.acl
     }
     init = urlfetch.fetch(url=init_url, headers=init_headers,
                           method=urlfetch.POST)

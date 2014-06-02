@@ -320,7 +320,6 @@ class GoogleOAuth2Service(OAuth2Service):
     person = OAuth2Client.get_data_from_response(content)
 
     rv = person
-    rv['email'] = person['email']
     rv['first_name'] = person['given_name']
     rv['last_name'] = person['family_name']
     rv['picture_url'] = person['picture']
@@ -330,6 +329,17 @@ class GoogleOAuth2Service(OAuth2Service):
 
 class FacebookOAuth2Service(OAuth2Service):
   '''Facebook OAuth2 specific service'''
+  def __init__(self, client_id, client_secret, redirect_uri, **kwargs):
+    defaults = {
+      'client_id': client_id,
+      'client_secret': client_secret,
+      'redirect_uri': redirect_uri,
+      'request_token_uri': 'https://www.facebook.com/dialog/oauth',
+      'access_token_uri': 'https://graph.facebook.com/oauth/access_token',
+    }
+    defaults.update(kwargs)
+    super(FacebookOAuth2Service, self).__init__(**defaults)
+
   def get_user_info(self, token=None):
     if token is None:
       token = self.token
@@ -342,6 +352,9 @@ class FacebookOAuth2Service(OAuth2Service):
     if not response.status == 200:
         raise OAuth2ServicesError(content)
     person = OAuth2Client.get_data_from_response(content)
+    person['picture_url'] = 'http://graph.facebook.com/%s/picture?type=large' % person['id']
+    person['profile_url'] = person['link']
+    del person['id']
 
     return person
 

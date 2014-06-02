@@ -115,10 +115,33 @@ class OAuth2Conf(stones.BaseHandler):
 
 class BaseOAuth2CallbackHandler(OAuth2Conf):
   '''Handler to handle Oauth2 request callback from provider.'''
+  def create_user(self, provider, user_info):
+    '''Create a new user'''
+    user_model = self.auth.store.user_model
+    return user_model.create_user(':'.join([provider, user_info['email']]),
+                                  **user_info)
+
+  def get_user(self, provider, user_info):
+    '''Find a user by provider and user info.'''
+    user_model = self.auth.store.user_model
+    user = user_model.get_by_auth_id(':'.join([provider, user_info['email']]))
+    if user:
+      return False, user
+    else:
+      user = user_model.query(user_model.email == user_info['email']).get()
+      if user:
+        return True, user
+    return None, None
+
+  def get_user_dict(self, user):
+    '''Convert a user model into webapp2_extras.auth user dict.'''
+    return self.auth.store.user_to_dict(user)
+
   def get(self, provider=None):
     code = self.request.get('code', None)
     if not code:
       return self.redirect_to('oauth2.begin', provider=provider)
+      #TODO: Add logic to manage declined permissions
     state = self.request.get('state', None)
     come_back_to = ''
     if state and '|' in state:
@@ -131,19 +154,17 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
                                            **oauth2_conf)
     token = service.get_access_token(code)
     user_info = service.get_user_info(token)
-    user_model = self.auth.store.user_model
-    user = user_model.get_by_auth_id(':'.join([provider, user_info['email']]))
-    user_instance = user
-    user = self.auth.store.user_to_dict(user)
+
+    add_auth_id, user = self.get_user(provider, user_info)
     if not user:
       # creates a new one
       user_info['type'] = ['u']
-      ok, user = user_model.create_user(':'.join([provider, user_info['email']]),
-                                        **user_info)
+      ok, user = self.create_user(provider, user_info)
+
       if ok:
         user.confirmed = datetime.datetime.now()
         user.put_async()
-        user = self.auth.store.user_to_dict(user)
+        user = self.get_user_dict(user)
         self.auth.set_session(user)
         if come_back_to:
           return self.redirect(come_back_to)
@@ -151,8 +172,19 @@ class BaseOAuth2CallbackHandler(OAuth2Conf):
       else:
         raise AuthError('Username already taken.')
     else:
-      if not user_instance.active:
+      if add_auth_id:
+        auth_ids = user.auth_ids
+        new_auth_id = ':'.join([provider, user_info['email']])
+        auth_ids.append(new_auth_id)
+        user.auth_ids = auth_ids
+        user.put_async()
+        unique_key = '%s.%s:%s' % (user.__class__.__name__, 'auth_id', new_auth_id)
+        unique = user.unique_model.create(unique_key)
+
+      if not user.active:
         self.abort(401, 'Inactive User.')
+
+      user = self.get_user_dict(user)
       self.auth.set_session(user)
       if come_back_to:
         return self.redirect(come_back_to)

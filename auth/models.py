@@ -38,7 +38,7 @@ class BaseUser(Webapp2_user, stones.Expando):
 
   def __unicode__(self):
     '''String representation for user model.'''
-    return self.auth_ids[0].split(':')[-1]
+    return self.email
 
   @property
   def is_confirmed(self):
@@ -58,7 +58,7 @@ class BaseUser(Webapp2_user, stones.Expando):
     rv = super(BaseUser, self).to_dict()
     rv.pop('password', None)
     rv['is_confirmed'] = self.is_confirmed
-    rv['source'] = self.auth_ids[0].split(':')[0]
+    rv['source'] = [src.split(':')[0] for src in self.auth_ids]
     return rv
 
   @classmethod
