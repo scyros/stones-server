@@ -323,7 +323,7 @@ class GoogleOAuth2Service(OAuth2Service):
     rv['first_name'] = person['given_name']
     rv['last_name'] = person['family_name']
     rv['picture_url'] = person['picture']
-    rv['profile_url'] = person['link']
+    rv['profile_url'] = person.get('link', '')
     return rv
 
 
