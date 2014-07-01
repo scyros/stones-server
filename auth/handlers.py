@@ -285,6 +285,7 @@ class BaseAccountVerificationEmailHandler(stones.BaseHandler):
 class BaseAccountVerificationHandler(WebAppBaseHandler):
   '''Handler to finish account verification process.'''
   tpl_key = 'verify_account'
+  user_activation = False
 
   def get(self, signup_token=None):
     user_id = int(self.request.get('user_id'))
@@ -347,6 +348,8 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       user.confirmed = datetime.datetime.now()
       user.first_name = first_name
       user.last_name = last_name
+      if self.user_activation:
+        user.active = True
       user.put_async()
       user.delete_signup_token(user_id, signup_token)
       user = self.auth.store.user_to_dict(user)

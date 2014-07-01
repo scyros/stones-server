@@ -775,7 +775,15 @@ class ReferenceProperty(StructuredProperty):
 
 Key = ndb.Key
 
-__all__ = ['Model', 'Key', 'datastore_errors', '_ReferenceModel', 'Expando']
+__all__ = [
+  'DATETIME_FORMAT',
+  'DATE_FORMAT',
+  'Model',
+  'Key',
+  'datastore_errors',
+  '_ReferenceModel',
+  'Expando',
+]
 for _name, _object in globals().items():
   if ((_name.endswith('Property') and issubclass(_object, ndb.Property)) or
       (_name.endswith('Error') and issubclass(_object, Exception))):
