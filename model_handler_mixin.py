@@ -306,7 +306,7 @@ class ModelHandlerMixin(object):
     Useful if you don't want to delete the entity, just mark it as
     disabled.
     entity: entity to be deleted.'''
-    entity.key.delete_async()
+    entity.key.delete()
 
   def delete(self, **kwargs):
     '''DELETE verb.
