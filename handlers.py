@@ -489,6 +489,7 @@ class ChunkedUploadHandler(BaseHandler):
     upload_headers = {
       'Authorization': 'Bearer %s' % access_token,
       'Content-Type': self.request.content_type,
+      'x-goog-acl': self.acl,
       'Content-Range': 'bytes %s-%s/*' % (start, stop),
     }
     if last:
