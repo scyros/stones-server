@@ -405,6 +405,10 @@ class Model(ndb.Model):
     initial_values = {
       'parent': parent,
     }
+
+    if 'id' in props_names:
+      initial_values['id'] = value['id']
+
     for prop in cls._properties.itervalues():
       name = prop._code_name
       if name in props_names and not isinstance(prop, ndb.ComputedProperty):

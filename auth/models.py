@@ -67,6 +67,7 @@ class BaseUser(Webapp2_user, stones.Expando):
     _uniques = ['email']
     if isinstance(unique_properties, list) or isinstance(unique_properties, tuple):
       _uniques += list(unique_properties)
+    _uniques = list(set(_uniques))
     return super(BaseUser, cls).create_user(auth_id, _uniques, **user_values)
 
   @classmethod

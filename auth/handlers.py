@@ -573,6 +573,43 @@ class BaseUserModelHandler(stones.BaseHandler, stones.ModelHandlerMixin):
     super(BaseUserModelHandler, self).__init__(*args, **kwargs)
     self.model = self.auth.store.user_model
 
+  def build_filters(self, kwargs):
+    filters = super(BaseUserModelHandler, self).build_filters(kwargs)
+
+    if 'type' in kwargs:
+      filters.append(self.model.type == kwargs['type'])
+
+    return filters
+
+  def create_model(self, **model_args):
+    rejected_attrs  = ('auth_ids', 'created', 'confirmed', 'is_confirmed',
+      'updated')
+    for attr in rejected_attrs:
+      model_args.pop(attr, None)
+
+    auth_id = model_args.get('email', None)
+    if not auth_id:
+      raise AuthError('No email provided.')
+    auth_id = 'own:' + auth_id
+    model_args['source'] = 'own'
+    password = model_args.pop('password', None)
+    if password:
+      model_args['password_raw'] = password
+
+    ok, new_user = self.model.create_user(auth_id, **model_args)
+    if ok:
+      signup_token = self.model.create_signup_token(new_user.key.id())
+      taskqueue.add(
+        url=self.uri_for('send.account.verification',
+                         user_id=new_user.key.id()),
+        params={'signup_token': signup_token},
+        method='POST'
+      )
+      return new_user
+    else:
+      raise AuthError('Impossible to create this user.')
+    return
+
   def update_model(self, _entity, **model_args):
     rejected_attrs  = ('auth_ids', 'email', 'created', 'confirmed',
       'is_confirmed', 'source', 'updated')
