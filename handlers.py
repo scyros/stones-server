@@ -25,6 +25,7 @@ import base64
 import os
 import urllib
 import hashlib
+import xlwt
 
 import webapp2
 import webapp2_extras.json
@@ -117,6 +118,26 @@ class BaseHandler(webapp2.RequestHandler):
       webapp2_extras.json.encode(self.errors, ensure_ascii=False,
                                  cls=JSONEncoder)
     )
+
+  def render_csv(self, csv_info, filename, sheet_name=u'Sheet 1'):
+    '''
+      Render an excel file containing entities information.
+
+      Args:
+        sheet_name: name of the sheet.
+    '''
+    book = xlwt.Workbook(encoding='utf-8')
+    sheet = book.add_sheet(sheet_name)
+
+    # write entities
+    for row_index, row in enumerate(csv_info):
+      for col_index, col in enumerate(row):
+        sheet.write(row_index, col_index, col)
+
+    book.save(self.response)
+    self.response.content_type = 'application/xls'
+    self.response.content_disposition = 'attachment; filename="%s.xls"' % filename
+
 
   def render_json(self, jsonable, **kwargs):
     '''Render JSON response'''

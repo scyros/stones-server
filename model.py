@@ -65,15 +65,25 @@ class _SetFromDictPropertyMixin(object):
     return self._do_validate(value)
 
 
-class GenericProperty(_SetFromDictPropertyMixin, ndb.GenericProperty):
+class _GetForCSVPropertyMixin(object):
+    '''Mixin to add "for_csv" functionality.'''
+    def _get_for_csv(self, instance):
+        '''Returns a proper value to be inserted in a CSV cell.'''
+        value = unicode(self._get_value(instance))
+        if self._repeated:
+            return ', '.join(value)
+        return value
+
+
+class GenericProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.GenericProperty):
   '''GenericProperty modified.'''
 
 
-class StringProperty(_SetFromDictPropertyMixin, ndb.StringProperty):
+class StringProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.StringProperty):
   '''StringProperty modified.'''
 
 
-class IntegerProperty(_SetFromDictPropertyMixin, ndb.IntegerProperty):
+class IntegerProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.IntegerProperty):
   ''''IntegerProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -84,7 +94,7 @@ class IntegerProperty(_SetFromDictPropertyMixin, ndb.IntegerProperty):
     return self._do_validate(int(value))
 
 
-class FloatProperty(_SetFromDictPropertyMixin, ndb.FloatProperty):
+class FloatProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.FloatProperty):
   '''FloatProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -95,7 +105,7 @@ class FloatProperty(_SetFromDictPropertyMixin, ndb.FloatProperty):
     return self._do_validate(float(value))
 
 
-class BooleanProperty(_SetFromDictPropertyMixin, ndb.BooleanProperty):
+class BooleanProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.BooleanProperty):
   '''BooleanProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
@@ -111,11 +121,11 @@ class BooleanProperty(_SetFromDictPropertyMixin, ndb.BooleanProperty):
     return self._do_validate(cast(value))
 
 
-class TextProperty(_SetFromDictPropertyMixin, ndb.TextProperty):
+class TextProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.TextProperty):
     '''TextProperty modified.'''
 
 
-class BlobProperty(_SetFromDictPropertyMixin, ndb.BlobProperty):
+class BlobProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.BlobProperty):
   '''BlobProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -126,11 +136,11 @@ class BlobProperty(_SetFromDictPropertyMixin, ndb.BlobProperty):
     return self._do_validate(cast(value))
 
 
-class JsonProperty(_SetFromDictPropertyMixin, ndb.JsonProperty):
+class JsonProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.JsonProperty):
   '''JsonProperty modified.'''
 
 
-class DateProperty(_SetFromDictPropertyMixin, ndb.DateProperty):
+class DateProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.DateProperty):
   '''DateProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -144,7 +154,7 @@ class DateProperty(_SetFromDictPropertyMixin, ndb.DateProperty):
     return self._do_validate(cast(value))
 
 
-class DateTimeProperty(_SetFromDictPropertyMixin, ndb.DateTimeProperty):
+class DateTimeProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.DateTimeProperty):
   ''''DateTimeProperty modified.'''
   def _set_from_dict(self, value):
     if isinstance(value, basestring):
@@ -152,7 +162,7 @@ class DateTimeProperty(_SetFromDictPropertyMixin, ndb.DateTimeProperty):
     return self._do_validate(value)
 
 
-class TimeProperty(_SetFromDictPropertyMixin, ndb.TimeProperty):
+class TimeProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.TimeProperty):
   '''TimeProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -166,7 +176,7 @@ class TimeProperty(_SetFromDictPropertyMixin, ndb.TimeProperty):
     return self._do_validate(cast(value))
 
 
-class KeyProperty(_SetFromDictPropertyMixin, ndb.KeyProperty):
+class KeyProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.KeyProperty):
   '''KeyProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -184,7 +194,7 @@ class KeyProperty(_SetFromDictPropertyMixin, ndb.KeyProperty):
     return self._do_validate(cast(value))
 
 
-class BlobKeyProperty(_SetFromDictPropertyMixin, ndb.BlobKeyProperty):
+class BlobKeyProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.BlobKeyProperty):
   '''BlobKeyProperty modifies.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -303,7 +313,7 @@ class GCSBlobProperty(StringProperty):
     return self._do_validate(cast(value))
 
 
-class UserProperty(_SetFromDictPropertyMixin, ndb.UserProperty):
+class UserProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.UserProperty):
   '''UserProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):
@@ -318,13 +328,13 @@ class UserProperty(_SetFromDictPropertyMixin, ndb.UserProperty):
     return self._do_validate(cast(value))
 
 
-class ComputedProperty(_SetFromDictPropertyMixin, ndb.ComputedProperty):
+class ComputedProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.ComputedProperty):
   '''ComputedProperty modified.'''
   def _set_from_dict(self, value):
     return None
 
 
-class GeoPtProperty(_SetFromDictPropertyMixin, ndb.GeoPtProperty):
+class GeoPtProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.GeoPtProperty):
   '''GeoPtProperty modified.'''
   def _set_from_dict(self, value):
     def cast(val):

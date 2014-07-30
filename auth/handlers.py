@@ -299,6 +299,7 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       'angular_app': self.angular_app,
       'page_title': self.page_title,
       'errors': {},
+      'user': self.auth.store.user_model.get_by_id(user_id),
     }
     if valid_token:
       return self.render_response(self._tpl_name, **context)
@@ -317,6 +318,7 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       'errors': {},
       'angular_app': self.angular_app,
       'page_title': self.page_title,
+      'user': self.auth.store.user_model.get_by_id(user_id),
     }
     if valid_token:
       password = self.request.get('password')
@@ -333,21 +335,18 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       if password and confirm and password != confirm:
         # TODO: Localize error messages
         context['errors']['confirm'] = u'Contraseña y Confirmación no coinciden'
-      if not first_name:
-        # TODO: Localize error messages
-        context['errors']['first_name'] = u'Tu nombre es obligatorio'
-      if not last_name:
-        # TODO: Localize error messages
-        context['errors']['last_name'] = u'Tu apellido es obligatorio'
 
       if context['errors']:
         return self.render_response(self._tpl_name, **context)
 
+      user_info = dict(self.request.params)
+      user_info.pop('password')
+      user_info.pop('confirm')
+
       user = self.auth.store.user_model.get_by_id(user_id)
       user.set_password(password)
+      user.populate(**user_info)
       user.confirmed = datetime.datetime.now()
-      user.first_name = first_name
-      user.last_name = last_name
       if self.user_activation:
         user.active = True
       user.put_async()
