@@ -788,6 +788,7 @@ class ReferenceProperty(StructuredProperty):
 
 
 Key = ndb.Key
+get_multi_async = ndb.get_multi_async
 
 __all__ = [
   'DATETIME_FORMAT',
@@ -797,6 +798,7 @@ __all__ = [
   'datastore_errors',
   '_ReferenceModel',
   'Expando',
+  'get_multi_async',
 ]
 for _name, _object in globals().items():
   if ((_name.endswith('Property') and issubclass(_object, ndb.Property)) or

@@ -269,6 +269,7 @@ class BaseAccountVerificationEmailHandler(stones.BaseHandler):
     user = self.auth.store.user_model.get_by_id(int(user_id))
 
     context = {
+      'host': self.request.host_url,
       'verify_url': self.uri_for('verify.account', signup_token=signup_token,
         user_id=user_id, _full=True),
     }
@@ -376,13 +377,13 @@ class BasePasswordReset1Handler(WebAppBaseHandler):
     user_email = self.request.get('user_email')
     if not user_email:
       # TODO: Localize error messages
-      errors['email'] = u'Contraseña no válida'
+      errors['user_email'] = u'Correo electrónico no válido'
     else:
       user = self.auth.store.user_model.query(
         stones.GenericProperty('email') == user_email).get()
       if not user:
         # TODO: Localize error messages
-        errors['email'] = u'Usuario no existente'
+        errors['user_email'] = u'Usuario no existente'
 
     if errors:
       context = {
@@ -394,7 +395,8 @@ class BasePasswordReset1Handler(WebAppBaseHandler):
       return self.render_response(self._tpl_name, **context)
     else:
       user_id = user.get_id()
-      pwd_reset_token = self.auth.store.create_pwd_reset_token(user_id)
+      user_model = self.auth.store.user_model
+      pwd_reset_token = user_model.create_pwd_reset_token(user_id)
       taskqueue.add(
         url=self.uri_for('send.password.reset', user_id=user_id),
         params={'pwd_reset_token': pwd_reset_token},
@@ -427,12 +429,14 @@ class BasePasswordResetEmailHandler(stones.BaseHandler):
     user = self.auth.store.user_model.get_by_id(int(user_id))
 
     context = {
+      'host': self.request.host_url,
       'pwd_reset_url': self.uri_for('password.reset.2',
         pwd_reset_token=pwd_reset_token, user_id=user_id, _full=True),
     }
 
     email = mail.EmailMessage(sender=config['email_sender'])
     email.to = user.email
+    email.subject = u'Cambio de contraseña'
     email.body = self.jinja2.render_template(
       config['templates']['password_reset_text'], **context)
     email.html = self.jinja2.render_template(
@@ -552,16 +556,16 @@ class BaseLoginHandler(WebAppBaseHandler):
 
 class BaseMakeSuperHeroHandler(OAuth2Conf):
   '''Handler to make one user super hero.'''
-  users_allowed = ['u']
   def get(self):
     user_model = self.auth.store.user_model
     qry = user_model.query(user_model.type == 'superhero')
     superheros = qry.count()
     if superheros == 0:
-      user_type = self.user.type
-      user_type.append('superhero')
-      self.user.type = user_type
-      self.user.put()
+      if self.user:
+        user_type = self.user.type
+        user_type.append('superhero')
+        self.user.type = user_type
+        self.user.put()
       return self.redirect_to('home')
     raise AuthError('You have no honor! You cannot be a superhero!')
 
