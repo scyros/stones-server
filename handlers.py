@@ -24,8 +24,8 @@ import traceback
 import base64
 import os
 import urllib
+import urlparse
 import hashlib
-import xlwt
 
 import webapp2
 import webapp2_extras.json
@@ -41,6 +41,8 @@ from google.appengine.ext import blobstore
 from google.appengine.api import app_identity
 from google.appengine.api import urlfetch
 from google.appengine.api import memcache
+
+import cloudstorage as gcs
 
 from .utils import *
 import oauth2
@@ -124,8 +126,13 @@ class BaseHandler(webapp2.RequestHandler):
       Render an excel file containing entities information.
 
       Args:
+        csv_info: Two dimensional array containing all data to be rendered in
+          excel file.
+        filename: downloadable filename.
         sheet_name: name of the sheet.
     '''
+    import xlwt
+
     book = xlwt.Workbook(encoding='utf-8')
     sheet = book.add_sheet(sheet_name)
 
@@ -364,32 +371,22 @@ class ChunkedUploadHandler(BaseHandler):
   acl = 'public-read'
 
   @webapp2.cached_property
-  def _local(self):
-    server_software = os.environ.get('SERVER_SOFTWARE')
-    if server_software is None:
-      return True
-    if 'remote_api' in server_software:
-      return False
-    if server_software.startswith(('Development', 'testutil')):
-      return True
-    return False
-
-  @webapp2.cached_property
   def base_path(self):
     '''Gets base path to make requests against Google Cloud Storage.'''
-    if self._local:
+    def local():
+      server_software = os.environ.get('SERVER_SOFTWARE')
+      if server_software is None:
+        return True
+      if 'remote_api' in server_software:
+        return False
+      if server_software.startswith(('Development', 'testutil')):
+        return True
+      return False
+
+    if local():
       return self.request.host_url + '/_ah/gcs'
     else:
-      return 'https://www.googleapis.com'
-
-  def get_access_token(self):
-    '''Get OAuth2 access token to sign requests.'''
-    scopes = [
-      'https://www.googleapis.com/auth/devstorage.read_write',
-      'https://www.googleapis.com/auth/devstorage.full_control',
-      'https://www.googleapis.com/auth/devstorage.read_only',
-    ]
-    return app_identity.get_access_token(scopes)
+      return 'https://storage.googleapis.com'
 
   def get_range(self):
     '''Extract range information.'''
@@ -404,171 +401,75 @@ class ChunkedUploadHandler(BaseHandler):
                           app_identity.get_default_gcs_bucket_name())
 
   def post(self):
+    '''
+      Create a new object inside the GSC bucket.
+    '''
     start, stop, total_size = self.get_range()
-    assert start == 0
-    last = stop == total_size - 1
-
     filename = self.request.get('filename', get_random_string(18))
-
-    access_token, _ = self.get_access_token()
-    if self._local:
-      init_url = '%s/%s/o?uploadType=resumable&name=%s' % (
-        self.base_path, self.bucket_name, filename)
-    else:
-      init_url = '%s/upload/storage/v1/b/%s/o?uploadType=resumable&name=%s' % (
-        self.base_path, self.bucket_name, filename)
-    init_headers = {
-      'Authorization': 'Bearer %s' % access_token,
-      'x-goog-acl': self.acl
+    filename = '/%s/%s' % (self.bucket_name, filename)
+    upload_info = {
+      'total_size': total_size,
+      'filename': filename
     }
-    init = urlfetch.fetch(url=init_url, headers=init_headers,
-                          method=urlfetch.POST)
-    if init.status_code >= 200 and init.status_code < 300:
-      session = init.headers['Location']
-      mem_key = '%s|%s' % ('GCS-Sessions', filename)
-      memcache.add(key=mem_key, value=session)
+    mem_key = '%s|%s' % ('GCS-Sessions', filename)
 
-      upload_headers = {
-        'Authorization': 'Bearer %s' % access_token,
-        'Content-Type': self.request.content_type,
-        'Content-Range': 'bytes %s-%s/*' % (start, stop),
-      }
-      if last:
-        upload_headers['Content-Range'] = 'bytes %s-%s/%s' % (
-          start, stop, total_size)
-      upload_content = fix_base64_padding(self.request.body)
-      upload_content = base64.b64decode(upload_content)
-      logger.info('Fetching %s' % session)
-      upload = urlfetch.fetch(url=session, method=urlfetch.PUT,
-                              payload=upload_content, headers=upload_headers)
-      if upload.status_code == 308:
-        logger.info('308 Redirection...')
-        self.render_json({
-          'filename': filename,
-          'start': start,
-          'stop': stop,
-          'lenght': len(upload_content),
-        })
-        self.response.status = 201
-      elif upload.status_code == 200:
-        logger.info('200 Last chunk...')
-        if not last:
-          # ??? no debería
-          logger.debug('Mmmm... This is suspicious and should not be happening...')
+    gcs_file = gcs.open(filename=filename, mode='w',
+                        content_type=self.request.content_type,
+                        options={'x-goog-acl': self.acl})
+    upload_content = fix_base64_padding(self.request.body)
+    upload_content = base64.b64decode(upload_content)
 
-        if self._local:
-          medialink_url = '%s/%s/%s' % (self.base_path, self.bucket_name,
-                                        filename)
-        else:
-          medialink_url = '%s/storage/v1/b/%s/o/%s' % (self.base_path,
-                                                      self.bucket_name,
-                                                      filename)
-        medialink = urlfetch.fetch(method=urlfetch.GET, url=medialink_url,
-          headers={
-            'Authorization': 'Bearer %s' % access_token,
-          })
-        if medialink.status_code >= 200 and medialink.status_code < 300:
-          medialink = self.decode_json(medialink.content)['mediaLink']
-        else:
-          medialink = None
+    gcs_file.write(upload_content)
+    gcs_file._flush()
 
-        self.render_json({
-          'filename': filename,
-          'start': start,
-          'stop': stop,
-          'lenght': len(upload_content),
-          'url': medialink,
-        })
-        self.response.status = 200
-        memcache.delete(mem_key)
-      else:
-        logger.error('An error has ocurred while trying to upload. Try again.')
-        logger.error('Upload URL: %s' % session)
-        logger.error('Status code %s: %s' % (upload.status_code, upload.content))
-        return self.abort(500, 'An error has ocurred while trying to upload. Try again.')
-    else:
-      logger.error('Impossible to create a new file in Google Cloud Storage.')
-      logger.info('Creation URL: %s' % init_url)
-      logger.error('Status code %s: %s' % (init.status_code, init.content))
-      return self.abort(507,
-        'Impossible to create a new file in Google Cloud Storage.')
+    self.response.status = 201
+    self.render_json({
+      'filename': filename,
+      'start': start,
+      'stop': stop,
+      'lenght': len(upload_content),
+    })
+    memcache.add(key=mem_key, value=gcs_file, time=60*60*24*7)
+
+    return
 
   def put(self):
     start, stop, total_size = self.get_range()
-    last = stop == total_size - 1
-
+    finish = stop + 1 == total_size
     filename = self.request.get('filename')
+    raw_filename = filename
     if not filename:
-      return self.abort(412, 'Filename is mandatory.')
+      return self.abort(400, 'Filename is mandatory.')
 
+    filename = '/%s/%s' % (self.bucket_name, filename)
     mem_key = '%s|%s' % ('GCS-Sessions', filename)
-    session = memcache.get(mem_key)
-    if not session:
-      return self.abort(404, 'Upload session not found.')
+    gcs_file = memcache.get(mem_key)
+    if not gcs_file:
+      return self.abort(500, 'No uoload session found.')
 
-    access_token, _ = self.get_access_token()
-    upload_headers = {
-      'Authorization': 'Bearer %s' % access_token,
-      'Content-Type': self.request.content_type,
-      'x-goog-acl': self.acl,
-      'Content-Range': 'bytes %s-%s/*' % (start, stop),
-    }
-    if last:
-      upload_headers['Content-Range'] = 'bytes %s-%s/%s' % (
-        start, stop, total_size)
+
     upload_content = fix_base64_padding(self.request.body)
     upload_content = base64.b64decode(upload_content)
-    logger.info('Fetching %s' % session)
-    upload = urlfetch.fetch(url=session, method=urlfetch.PUT,
-                            payload=upload_content, headers=upload_headers)
-    if upload.status_code == 308:
-      logger.info('308 Redirection...')
-      self.render_json({
-        'filename': filename,
-        'start': start,
-        'stop': stop,
-        'lenght': len(upload_content),
-      })
-      self.response.status = 201
-    elif upload.status_code == 200:
-      logger.info('200 Last chunk...')
-      if not last:
-        # ??? no debería
-        logger.debug('Mmmm... This is suspicious and should not be happening...')
 
-      if self._local:
-        medialink_url = '%s/%s/%s' % (self.base_path, self.bucket_name,
-                                      filename)
-      else:
-        medialink_url = '%s/storage/v1/b/%s/o/%s' % (self.base_path,
-                                                    self.bucket_name,
-                                                    filename)
-      medialink = urlfetch.fetch(method=urlfetch.GET, url=medialink_url,
-        headers={
-          'Authorization': 'Bearer %s' % access_token,
-        })
-      if medialink.status_code >= 200 and medialink.status_code < 300:
-        medialink = self.decode_json(medialink.content)['mediaLink']
-      else:
-        medialink = None
+    gcs_file.write(upload_content)
 
-      self.render_json({
-        'filename': filename,
-        'start': start,
-        'stop': stop,
-        'lenght': len(upload_content),
-        'url': medialink,
-      })
+    self.response.status = 201
+    response = {
+      'filename': filename,
+      'start': start,
+      'stop': stop,
+      'lenght': len(upload_content),
+    }
+    if finish:
+      response['url'] = '%s%s' % (self.base_path, gcs_file._path)
       self.response.status = 200
+      gcs_file.close()
       memcache.delete(mem_key)
     else:
-      logger.error('An error has ocurred while trying to upload. Try again.')
-      logger.error('Status code %s: %s' % (upload.status_code, upload.content))
-      logger.info('Upload length: %s' % len(upload_content))
-      logger.info('Upload range: %s' % (stop - start))
-      logger.info('Upload 256kb multiple?: %s' % ((len(upload_content) % (256 * 1024)) == 0))
-      return self.abort(500, 'An error has ocurred while trying to upload. Try again.')
-
+      gcs_file._flush()
+      memcache.set(mem_key, gcs_file, time=60*60*24*7)
+    self.render_json(response)
+    return
 
 class GeocodingHandler(BaseHandler):
   '''Handler to manage geocoding requests.

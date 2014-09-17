@@ -221,41 +221,36 @@ class BaseSignupHandler(WebAppBaseHandler):
   tpl_key = 'signup'
 
   def post(self):
-    username = self.request.get('username')
+    user = self.extract_json()
 
-    context = {
-      'angular_app': self.angular_app,
-      'page_title': self.page_title,
-      'errors': {},
-    }
-    if not mail.is_email_valid(username):
-      # TODO: Localize error messages
-      context['errors']['username'] = u'Nombre de usuario no válido.'
+    if not 'username' in user:
+      return self.abort(400, 'Username is mandatory.')
 
-    if context['errors']:
-      context['username'] = username
-      return self.render_response(self._tpl_name, **context)
+    # we assume that usernames are valid emails
+    if not mail.is_email_valid(user['username']):
+      return self.abort(400, 'Username is not valid. It must be an email.')
 
+    username = user.pop('username')
     user_model = self.auth.store.user_model
     auth_id = ':'.join(['own', username])
-    user_info = {
-      'email': username,
-      'type': ['u'],
-    }
-    ok, new_user = user_model.create_user(auth_id, **user_info)
+    user['email'] = username
+    if not 'type' in user or not isinstance(user['type'], list):
+      user['type'] = ['u']
+    if not 'u' in user['type']:
+      user['type'].append('u')
+
+    ok, new_user = user_model.create_user(auth_id, **user)
     if ok:
       signup_token = user_model.create_signup_token(new_user.key.id())
       taskqueue.add(
-        url=self.uri_for('send.account.verification', user_id=new_user.key.id()),
+        url=self.uri_for('send.account.verification',
+                         user_id=new_user.key.id()),
         params={'signup_token': signup_token},
         method='POST'
       )
-      return self.redirect_to('welcome')
+      return self.render_json(new_user)
     else:
-      context['username'] = username
-      # TODO: Localize error messages
-      context['errors']['username'] = u'Nombre de usuario ya existente.'
-      return self.render_response(self._tpl_name, **context)
+      return self.abort(500, 'Username already taken. Username must be unique.')
 
 
 class BaseAccountVerificationEmailHandler(stones.BaseHandler):
