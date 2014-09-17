@@ -418,18 +418,24 @@ class ChunkedUploadHandler(BaseHandler):
                         options={'x-goog-acl': self.acl})
     upload_content = fix_base64_padding(self.request.body)
     upload_content = base64.b64decode(upload_content)
-
     gcs_file.write(upload_content)
-    gcs_file._flush()
 
-    self.response.status = 201
-    self.render_json({
+    response = {
       'filename': filename,
       'start': start,
       'stop': stop,
       'lenght': len(upload_content),
-    })
-    memcache.add(key=mem_key, value=gcs_file, time=60*60*24*7)
+    }
+
+    if total_size - stop == 1:  #last chunk
+      gcs_file.close()
+      response['url'] = '%s%s' % (self.base_path, gcs_file._path)
+    else:
+      gcs_file._flush()
+      memcache.add(key=mem_key, value=gcs_file, time=60*60*24*7)
+
+    self.response.status = 201
+    self.render_json(response)
 
     return
 
