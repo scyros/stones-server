@@ -275,6 +275,7 @@ class BaseAccountVerificationEmailHandler(stones.BaseHandler):
     }
 
     email = mail.EmailMessage(sender=config['email_sender'])
+    email.subject = u'Alta en el sistema'
     email.to = user.email
     email.body = self.jinja2.render_template(
       config['templates']['welcome_text'], **context)
@@ -306,6 +307,10 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       return self.render_response(self._tpl_name, **context)
     else:
       self.abort(403, 'Invalid Token.')
+
+  def verify_user_info(self, user_info):
+    '''Verify user info.'''
+    return True, {}
 
   def post(self, signup_token=None):
     user_id = int(self.request.get('user_id'))
@@ -343,6 +348,11 @@ class BaseAccountVerificationHandler(WebAppBaseHandler):
       user_info = dict(self.request.params)
       user_info.pop('password')
       user_info.pop('confirm')
+
+      valid_user, reasons = self.verify_user_info(user_info)
+      if not valid_user:
+        context['errors'].update(reasons)
+        return self.render_response(self._tpl_name, **context)
 
       user = self.auth.store.user_model.get_by_id(user_id)
       user.set_password(password)
