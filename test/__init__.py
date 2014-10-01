@@ -17,11 +17,3 @@
 # along with Stones Server Side.  If not, see <http://www.gnu.org/licenses/>.
 
 # Copyright 2013, Carlos León <carlos.eduardo.leon.franco@gmail.com>
-
-__all__ = []
-import handlers
-from handlers import *
-__all__ += handlers.__all__
-import models
-from models import *
-__all__ += models.__all__

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- coding:utf-8 -*-
+#-*- coding: utf-8 -*-
 
 # This file is part of Stones Server Side.
 
@@ -18,10 +18,9 @@
 
 # Copyright 2013, Carlos León <carlos.eduardo.leon.franco@gmail.com>
 
-__all__ = []
-import handlers
-from handlers import *
-__all__ += handlers.__all__
-import models
-from models import *
-__all__ += models.__all__
+from utils import BaseTestCase
+
+
+class ModelTestCase(BaseTestCase):
+  def test_1(self):
+    self.assertTrue(True)

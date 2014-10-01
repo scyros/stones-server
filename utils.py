@@ -36,7 +36,6 @@ from google.appengine.api import files
 from google.appengine.api import users as google_users
 from google.appengine.api import images
 from google.appengine.api import datastore_types
-from babel.support import LazyProxy
 import model
 
 import unittest
@@ -45,9 +44,17 @@ from google.appengine.datastore import datastore_stub_util
 
 
 logger = logging.getLogger(__name__)
-__all__ = ['JSONEncoder', 'clear_id', 'BaseTestCase', 'get_constant_display',
-           'get_constants_choices', 'resize_image', 'fix_base64_padding',
-           'get_random_string', 'decode_json', 'encode_json', 'if_attr']
+__all__ = ['JSONEncoder',
+           'clear_id',
+           'BaseTestCase',
+           'get_constant_display',
+           'get_constants_choices',
+           'resize_image',
+           'fix_base64_padding',
+           'get_random_string',
+           'decode_json',
+           'encode_json',
+           'if_attr']
 
 
 def get_constant_display(constant, constants_group):
@@ -86,6 +93,11 @@ class JSONEncoder(json.JSONEncoder):
     super(JSONEncoder, self).__init__(*args, **kwargs)
 
   def default(self, obj):
+    try:
+      from babel.support import LazyProxy
+    except ImportError:
+      LazyProxy = None
+
     if isinstance(obj, datetime.datetime) or isinstance(obj, datetime.date):
       return obj.strftime(model.DATETIME_FORMAT)
     elif isinstance(obj, datetime.date):
@@ -94,7 +106,7 @@ class JSONEncoder(json.JSONEncoder):
       return obj.strftime(model.TIME_FORMAT)
     elif isinstance(obj, ndb.Query):
       return obj.fetch()
-    elif isinstance(obj, LazyProxy):
+    elif LazyProxy and isinstance(obj, LazyProxy):
       return unicode(obj)
     elif isinstance(obj, ndb.Model):
       our_dict = obj.to_dict()
@@ -151,7 +163,11 @@ class BaseTestCase(unittest.TestCase):
   '''Base class to test.'''
   def __init__(self, *args, **kwargs):
     super(BaseTestCase, self).__init__(*args, **kwargs)
-    self.app = webapp2.import_string('main.app')
+    try:
+      app = webapp2.import_string('main.app')
+    except webapp2.ImportStringError:
+      app = None
+    self.app = app
 
   def setUp(self):
     '''Activates some appengine specific stuff.'''
