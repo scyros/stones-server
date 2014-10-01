@@ -67,8 +67,9 @@ class ModelHandlerMixin(object):
   # properties to sort GET responses
   # it should be model properties, e.g., MyModel.myproperty
   ordering = []
-  # model properties to be retrieved in GET responses
+  # model properties to be retrieved in GET responses through projections
   # it should be strings, e.g., 'myproperty'
+  # TODO: Not implemented yet
   GET_properties = []
 
   def _pre_get_hook(self):

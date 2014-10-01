@@ -14,15 +14,24 @@ import webapp2_extras.auth
 
 
 logger = logging.getLogger(__name__)
-__all__ = ['AuthError', 'ProviderConfNotFoundError', 'BaseWelcomeHandler',
-           'BaseOAuth2CallbackHandler', 'BaseUserModelHandler',
-           'BaseUserTypesHandler', 'BaseOAuth2BeginHandler',
-           'BaseUserAuthProvidersHandler', 'BaseMakeSuperHeroHandler',
-           'BaseLogoutHandler', 'BaseSignupHandler',
+__all__ = ['AuthError',
+           'ProviderConfNotFoundError',
+           'BaseWelcomeHandler',
+           'BaseOAuth2CallbackHandler',
+           'BaseUserModelHandler',
+           'BaseUserTypesHandler',
+           'BaseOAuth2BeginHandler',
+           'BaseUserAuthProvidersHandler',
+           'BaseMakeSuperHeroHandler',
+           'BaseLogoutHandler',
+           'BaseSignupHandler',
            'BaseAccountVerificationEmailHandler',
-           'BaseAccountVerificationHandler', 'BaseLoginHandler',
-           'BasePasswordReset1Handler', 'BasePasswordResetSendHandler',
-           'BasePasswordResetEmailHandler', 'BasePasswordReset2Handler']
+           'BaseAccountVerificationHandler',
+           'BaseLoginHandler',
+           'BasePasswordReset1Handler',
+           'BasePasswordResetSendHandler',
+           'BasePasswordResetEmailHandler',
+           'BasePasswordReset2Handler']
 
 AUTH_CONFIG = {
   'providers': {},
@@ -39,7 +48,7 @@ AUTH_CONFIG = {
     'password_reset_text': 'auth/password_reset_email.txt',
     'password_reset_html': 'auth/password_reset_email.html',
   },
-  'email_sender': 'foo@bar.com',
+  'email_sender': None,
 }
 
 

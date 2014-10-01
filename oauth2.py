@@ -38,8 +38,13 @@ try:
 except ImportError:
   import json
 
-__all__ = ['OAuth2Service', 'OAuth2ServicesError', 'OAuth2ClientError',
-           'OAuth2Client', 'OAuth2Token', 'OAuth2Error', 'get_service']
+__all__ = ['OAuth2Error',
+           'OAuth2ServicesError',
+           'OAuth2ClientError',
+           'OAuth2Service',
+           'OAuth2Client',
+           'OAuth2Token',
+           'get_service']
 
 
 class OAuth2Error(Exception):

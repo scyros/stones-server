@@ -46,17 +46,11 @@ import cloudstorage as gcs
 
 from .utils import *
 import oauth2
-from .oauth2 import get_service
-
-from .model_handler_mixin import ModelHandlerMixin
 
 __all__ = ['BaseHandler',
-           'ModelHandlerMixin',
            'NoKeyError',
            'UserIdentifierUsedError',
            'ConstantHandler',
-           'tasklet',
-           'Return',
            'BlobHandler',
            'ChunkedUploadHandler',
            'GeocodingHandler']
@@ -440,6 +434,9 @@ class ChunkedUploadHandler(BaseHandler):
     return
 
   def put(self):
+    '''
+      Add bytes to an existing object in GCS.
+    '''
     start, stop, total_size = self.get_range()
     finish = stop + 1 == total_size
     filename = self.request.get('filename')
@@ -451,8 +448,7 @@ class ChunkedUploadHandler(BaseHandler):
     mem_key = '%s|%s' % ('GCS-Sessions', filename)
     gcs_file = memcache.get(mem_key)
     if not gcs_file:
-      return self.abort(500, 'No uoload session found.')
-
+      return self.abort(500, 'No upload session found.')
 
     upload_content = fix_base64_padding(self.request.body)
     upload_content = base64.b64decode(upload_content)
@@ -476,6 +472,7 @@ class ChunkedUploadHandler(BaseHandler):
       memcache.set(mem_key, gcs_file, time=60*60*24*7)
     self.render_json(response)
     return
+
 
 class GeocodingHandler(BaseHandler):
   '''Handler to manage geocoding requests.
@@ -551,3 +548,8 @@ class GeocodingHandler(BaseHandler):
         logger.warning('Status code: %s' % req.status_code)
         logger.warning('Reason: %s' % req.content)
         return self.abort(500)
+
+
+# NDB Specific imports
+__all__ += ['tasklet',
+            'Return']

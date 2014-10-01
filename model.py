@@ -791,17 +791,20 @@ Key = ndb.Key
 get_multi_async = ndb.get_multi_async
 get_multi = ndb.get_multi
 
-__all__ = [
-  'DATETIME_FORMAT',
-  'DATE_FORMAT',
-  'Model',
-  'Key',
-  'datastore_errors',
-  '_ReferenceModel',
-  'Expando',
-  'get_multi_async',
-  'get_multi',
-]
+# NDB imports
+__all__ = ['Key',
+           'get_multi',
+           'get_multi_async',
+           'datastore_errors']
+
+# Module imports
+__all__ += ['DATETIME_FORMAT',
+            'DATE_FORMAT',
+            'Model',
+            '_ReferenceModel',
+            'Expando']
+
+# Property imports
 for _name, _object in globals().items():
   if ((_name.endswith('Property') and issubclass(_object, ndb.Property)) or
       (_name.endswith('Error') and issubclass(_object, Exception))):
