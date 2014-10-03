@@ -87,22 +87,41 @@ class IntegerProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.I
   ''''IntegerProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
+    if isinstance(value, bool):
+      raise datastore_errors.BadValueError('Expected integer, got %s' % value)
+
     if self._repeated:
       check_list(value)
       value = [int(val) for val in value]
       return [self._do_validate(v) for v in value]
-    return self._do_validate(int(value))
+    else:
+      try:
+        check_list(value)
+      except datastore_errors.BadValueError:
+        return self._do_validate(int(value))
+      else:
+        raise datastore_errors.BadValueError('Expected integer, got %s' % value)
 
 
 class FloatProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.FloatProperty):
   '''FloatProperty modified.'''
   def _set_from_dict(self, value):
     '''Returns a proper value to property but not sets it.'''
+    if isinstance(value, bool):
+      raise datastore_errors.BadValueError('Expected float, got %s' % value)
+
     if self._repeated:
       check_list(value)
       value = [float(val) for val in value]
       return [self._do_validate(v) for v in value]
-    return self._do_validate(float(value))
+    else:
+      try:
+        check_list(value)
+      except datastore_errors.BadValueError:
+        return self._do_validate(float(value))
+      else:
+        raise datastore_errors.BadValueError('Expected float, got %s' % value)
+
 
 
 class BooleanProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.BooleanProperty):
@@ -409,12 +428,9 @@ class Model(ndb.Model):
                                            % (value,))
 
     props_names = value.keys()
-    parent = None
+    initial_values = {}
     if 'parent' in props_names:
-      parent = ndb.Key(urlsafe=value['parent'])
-    initial_values = {
-      'parent': parent,
-    }
+      initial_values['parent'] = ndb.Key(urlsafe=value['parent'])
 
     if 'id' in props_names:
       initial_values['id'] = value['id']
