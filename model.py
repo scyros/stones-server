@@ -146,17 +146,22 @@ class TextProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.Text
 
 class BlobProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.BlobProperty):
   '''BlobProperty modified.'''
-  def _set_from_dict(self, value):
-    def cast(val):
-      return str(val)
-
-    if self._repeated:
-      return [self._do_validate(cast(v)) for v in value]
-    return self._do_validate(cast(value))
 
 
 class JsonProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.JsonProperty):
   '''JsonProperty modified.'''
+  def _set_from_dict(self, value):
+    '''Returns a proper value to property but not sets it.'''
+    def cast(val):
+      if not isinstance(val, dict):
+        raise datastore_errors.BadValueError('Expected dict, got %s' % type(val).__name__)
+      return val
+
+    if self._repeated:
+      check_list(value)
+      value = [cast(val) for val in value]
+      return [self._do_validate(v) for v in value]
+    return self._do_validate(cast(value))
 
 
 class DateProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.DateProperty):
@@ -166,19 +171,28 @@ class DateProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.Date
       if isinstance(val, basestring):
         val = datetime.datetime.strptime(val, DATE_FORMAT)
         val = val.date()
+      if not isinstance(val, datetime.date):
+        raise datastore_errors.BadValueError('Expected date, got %s' % val)
       return val
 
-      if self._repeated:
-        return [self._do_validate(cast(value)) for v in value]
+    if self._repeated:
+      return [self._do_validate(cast(value)) for v in value]
     return self._do_validate(cast(value))
 
 
 class DateTimeProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.DateTimeProperty):
   ''''DateTimeProperty modified.'''
   def _set_from_dict(self, value):
-    if isinstance(value, basestring):
-      value = datetime.datetime.strptime(value, DATETIME_FORMAT)
-    return self._do_validate(value)
+    def cast(val):
+      if isinstance(val, basestring):
+        val = datetime.datetime.strptime(value, DATETIME_FORMAT)
+      if not isinstance(val, datetime.date):
+        raise datastore_errors.BadValueError('Expected datetime, got %s' % val)
+      return val
+
+    if self._repeated:
+      return [self._do_validate(cast(value)) for v in value]
+    return self._do_validate(cast(value))
 
 
 class TimeProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.TimeProperty):
@@ -188,6 +202,8 @@ class TimeProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.Time
       if isinstance(val, basestring):
         val = datetime.datetime.strptime(val, TIME_FORMAT)
         val = val.time()
+      if not isinstance(val, datetime.time):
+        raise datastore_errors.BadValueError('Expected time, got %s' % val)
       return val
 
     if self._repeated:
@@ -206,6 +222,9 @@ class KeyProperty(_SetFromDictPropertyMixin, _GetForCSVPropertyMixin,  ndb.KeyPr
           val = ndb.Key(urlsafe=val['urlsafe_key'])
         elif val.get('__key__', None):
           val = ndb.Key(urlsafe=val['__key__'])
+
+      if not isinstance(val, ndb.Key):
+        raise datastore_errors.BadValueError('Expected key, got %s' % val)
       return val
 
     if self._repeated:
@@ -268,7 +287,7 @@ class GCSBlobProperty(StringProperty):
 
   def is_base64(self, value):
     try:
-      header = value.split(',')[0]
+      header, content = value.split(',')
       return bool(BASE64_HEADER_REGEX.search(header))
     except:
       return False
@@ -278,7 +297,7 @@ class GCSBlobProperty(StringProperty):
     return content
 
   def get_base64_mimetype(self, value):
-    header = value.split(',')[0]
+    header, content = value.split(',')
     r = BASE64_HEADER_REGEX.search(header)
     return '/'.join(r.groups())
 
@@ -816,6 +835,7 @@ __all__ = ['Key',
 # Module imports
 __all__ += ['DATETIME_FORMAT',
             'DATE_FORMAT',
+            'TIME_FORMAT',
             'Model',
             '_ReferenceModel',
             'Expando']
