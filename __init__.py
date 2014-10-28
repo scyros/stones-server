@@ -25,6 +25,9 @@ __all__ += handlers.__all__
 import model
 from model import *
 __all__ += model.__all__
+import model_handler_mixin
+from model_handler_mixin import *
+__all__ += model_handler_mixin.__all__
 import utils
 from utils import *
 __all__ += utils.__all__

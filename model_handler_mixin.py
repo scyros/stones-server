@@ -31,6 +31,10 @@ from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
 
 from .utils import *
 
+__all__ = ['Error',
+           'NoKeyOrIdError',
+           'NoEntityError',
+           'ModelHandlerMixin']
 
 logger = logging.getLogger(__name__)
 
