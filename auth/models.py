@@ -20,6 +20,7 @@
 
 import logging
 from webapp2_extras.appengine.auth.models import User as Webapp2_user
+from webapp2_extras.appengine.auth.models import UserToken as Webapp2_token
 from webapp2_extras import security
 
 import stones
@@ -29,8 +30,15 @@ logger = logging.getLogger(__name__)
 __all__ = ['BaseUser']
 
 
+class UserToken(Webapp2_token):
+  '''Base User Token model.'''
+  user = stones.StringProperty(required=True, indexed=True)
+
+
 class BaseUser(Webapp2_user, stones.Expando):
   '''Base User model.'''
+  token_model = UserToken
+
   created = stones.DateTimeProperty(auto_now_add=True)
   updated = stones.DateTimeProperty(auto_now=True)
   active = stones.BooleanProperty(default=True)
@@ -86,6 +94,32 @@ class BaseUser(Webapp2_user, stones.Expando):
       _uniques += list(unique_properties)
     _uniques = list(set(_uniques))
     return super(BaseUser, cls).create_user(auth_id, _uniques, **user_values)
+
+  def delete(self):
+    '''Deletes the user taking care of unique attributes deletion.'''
+    delete = True
+
+    # Delete uniques
+    try:
+      for auth_id in self.auth_ids:
+        unique_key = stones.Key(self.unique_model,
+                              '%s.auth_id:%s' % (self.__class__.__name__, auth_id))
+        unique_key.delete()
+
+      unique_key = stones.Key(self.unique_model,
+                            '%s.email:%s' % (self.__class__.__name__, self.email))
+      unique_key.delete()
+    except Exception, err:
+      logger.error(err)
+      delete = False
+
+    # Delete user tokens
+    for signup_token in self.token_model.query(
+      self.token_model.user == str(self.key.integer_id())):
+      signup_token.key.delete_async()
+
+    if delete:
+      self.key.delete()
 
   @classmethod
   def create_pwd_reset_token(cls, user_id):
