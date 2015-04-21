@@ -654,6 +654,9 @@ class _ReferenceModel(Model):
   urlsafe_key = StringProperty('k')
   display = StringProperty('d')
 
+  def getEntity(self):
+    return Key(urlsafe=self.urlsafe_key).get()
+
 
 class ReferenceProperty(StructuredProperty):
   '''Property to store references to real entities with a description of the

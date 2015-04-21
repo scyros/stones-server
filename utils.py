@@ -151,7 +151,6 @@ def resize_image(b64encoded_image, width=0, height=0):
     mimetype = 'image/png'
     content = b64encoded_image
 
-  logger.debug(mimetype)
   img = base64.decodestring(content)
   img = images.resize(image_data=img, height=height, width=width)
   img = base64.encodestring(img)

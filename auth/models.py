@@ -47,7 +47,7 @@ class BaseUser(Webapp2_user, stones.Expando):
   auth_ids = stones.StringProperty(repeated=True)
   # Hashed password. Not required because third party authentication
   # doesn't use password.
-  password = stones.StringProperty()
+  password = stones.StringProperty(default='')
   type = stones.StringProperty(repeated=True)
   first_name = stones.StringProperty()
   last_name = stones.StringProperty()

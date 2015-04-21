@@ -27,6 +27,7 @@ import stones.oauth2 as oauth2
 from google.appengine.api import mail
 from google.appengine.api import taskqueue
 
+import webapp2
 import webapp2_extras.auth
 
 
@@ -77,6 +78,23 @@ class ProviderConfNotFoundError(AuthError):
   '''Provider configuration not found in app settings.'''
 
 
+def get_config():
+  # Get config to this module
+  config = webapp2.get_app().config.load_config('stones.auth',
+    default_values=AUTH_CONFIG,
+    required_keys=['templates', 'email_sender'])
+  try:
+    templates = config['templates']
+  except KeyError, e:
+    del webapp2.app.config['stones.auth']
+    try:
+      webapp2.app.config.loaded.remove('stones.auth')
+    except Exception, e:
+      pass
+    config = get_config()
+  return config
+
+
 class WebAppBaseHandler(stones.BaseHandler):
   '''Base handler to manage pages which their page titles and angular app
   should be modified.'''
@@ -86,10 +104,11 @@ class WebAppBaseHandler(stones.BaseHandler):
 
   def __init__(self, *args, **kwargs):
     super(WebAppBaseHandler, self).__init__(*args, **kwargs)
-    config = self.app.config.load_config('stones.auth',
-      default_values=AUTH_CONFIG,
-      required_keys=['templates'])
-    self._tpl_name = config['templates'][self.tpl_key]
+    config = get_config()
+    try:
+      self._tpl_name = config['templates'][self.tpl_key]
+    except KeyError, e:
+      self._tpl_name = AUTH_CONFIG['templates'][self.tpl_key]
 
   def get(self):
     context = {
@@ -123,7 +142,7 @@ class OAuth2Conf(stones.BaseHandler):
 
   def get_provider_conf(self, provider_name):
     '''Gets provider configuration.'''
-    conf = self.app.config.load_config('stones.auth')
+    conf = get_config()
     if not conf:
       raise ProviderConfNotFoundError('No configuration found in settigs.')
     try:
@@ -247,9 +266,16 @@ class BaseSignupHandler(WebAppBaseHandler):
   tpl_key = 'signup'
 
   def post(self):
-    user = self.extract_json()
+    JSONAPI = True
+    try:
+      # User creation through JSON API
+      user = self.extract_json()
+    except ValueError:
+      # User creation through HTML Form
+      user = {'username': self.request.get('username', '')}
+      JSONAPI = False
 
-    if not 'username' in user:
+    if not 'username' in user or not user['username']:
       return self.abort(400, 'Username is mandatory.')
 
     # we assume that usernames are valid emails
@@ -274,7 +300,13 @@ class BaseSignupHandler(WebAppBaseHandler):
         params={'signup_token': signup_token},
         method='POST'
       )
-      return self.render_json(new_user)
+      if JSONAPI:
+        return self.render_json(new_user)
+      else:
+        config = get_config()
+        context = {'user': new_user}
+        return self.render_response(config['templates']['welcome'], **context)
+
     else:
       return self.abort(500, 'Username already taken. Username must be unique.')
 
@@ -282,9 +314,7 @@ class BaseSignupHandler(WebAppBaseHandler):
 class BaseAccountVerificationEmailHandler(stones.BaseHandler):
   '''Handler to begin account verification process.'''
   def post(self, user_id=None):
-    config = self.app.config.load_config('stones.auth',
-      default_values=AUTH_CONFIG,
-      required_keys=['email_sender', 'templates'])
+    config = get_config()
 
     signup_token = self.request.get('signup_token')
     user = self.auth.store.user_model.get_by_id(int(user_id))
@@ -452,9 +482,7 @@ class BasePasswordResetSendHandler(WebAppBaseHandler):
 class BasePasswordResetEmailHandler(stones.BaseHandler):
   '''Handler to send password reset email.'''
   def post(self, user_id=None):
-    config = self.app.config.load_config('stones.auth',
-      default_values=AUTH_CONFIG,
-      required_keys=['email_sender', 'templates'])
+    config = get_config()
 
     pwd_reset_token = self.request.get('pwd_reset_token')
     user = self.auth.store.user_model.get_by_id(int(user_id))
@@ -570,19 +598,24 @@ class BaseLoginHandler(WebAppBaseHandler):
     }
 
     try:
-      user = self.auth.get_user_by_password(':'.join(['own', username]),
-        password)
-      if user.get('user_id'):
-        user_model = self.auth.store.user_model.get_by_id(user['user_id'])
-        if not user_model.active:
-          raise webapp2_extras.auth.InvalidAuthIdError
-      self.auth.set_session(user)
-      return self.redirect_to('home')
+      user = self.auth.store.user_model.get_by_auth_id(':'.join(['own', username]))
+      if user and user.password:
+        user = self.auth.get_user_by_password(':'.join(['own', username]),
+          password)
+        if user.get('user_id'):
+          user_model = self.auth.store.user_model.get_by_id(user['user_id'])
+          if not user_model.active:
+            raise webapp2_extras.auth.InvalidAuthIdError
+        self.auth.set_session(user)
+        return self.redirect_to('home')
+      else:
+        raise webapp2_extras.auth.InvalidAuthIdError
     except (webapp2_extras.auth.InvalidAuthIdError,
       webapp2_extras.auth.InvalidPasswordError), e:
       # TODO: Localize error messages
       context['errors'] = u'Nombre de usuario o contraseña incorrectos'
       return self.render_response(self._tpl_name, **context)
+
 
 
 class BaseMakeSuperHeroHandler(OAuth2Conf):
@@ -669,9 +702,12 @@ class BaseUserAuthProvidersHandler(stones.ConstantHandler):
 
   def __init__(self, *args, **kwargs):
     super(BaseUserAuthProvidersHandler, self).__init__(*args, **kwargs)
-    conf = self.app.config.load_config('stones.auth',
-                                            required_keys=['providers'])
-    conf = conf['providers']
+    conf = get_config()
+    try:
+      conf = conf['providers']
+    except KeyError, e:
+      conf = {}
+
     conf['own'] = {
       'display': self.own_auth_provider_display,
     }

@@ -241,7 +241,7 @@ class BaseHandler(webapp2.RequestHandler):
     tb = sys.exc_info()[-1]
     ret = {
       'msgs': [{
-        'msg': '%s: %s' % (exception.__class__.__name__, unicode(exception)),
+        'msg': '%s' % unicode(exception),
         'level': 'error',
         'traceback': traceback.format_exc(tb),
       }]
