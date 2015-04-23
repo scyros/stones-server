@@ -56,9 +56,11 @@ def get_entity_by_key(key):
   try:
     entity = Key(urlsafe=key).get()
     if not entity:
+      logger.warning('No entity found for %s' % key)
       raise NoEntityError
     return entity
   except ProtocolBufferDecodeError, e:
+    logger.warning('ProtocolBufferDecodeError for %s' % key)
     raise NoEntityError
 
 
@@ -175,11 +177,11 @@ class ModelHandlerMixin(object):
       try:
         entities = get_entity_by_key(key)
       except NoEntityError:
-        return self.abort(404, '%s not found.' % self.model.__class__.__name__)
+        return self.abort(404, '%s not found.' % type(self.model()).__name__)
     elif id:
       entities = self.model.get_by_id(id)
       if not entities:
-        return self.abort(404, '%s not found.' % self.model.__class__.__name__)
+        return self.abort(404, '%s not found.' % type(self.model()).__name__)
     else:
         # No key or id. We need to return entities by query filters.
         kwargs.update(self.request.params)
@@ -286,11 +288,11 @@ class ModelHandlerMixin(object):
       try:
         entity = get_entity_by_key(key)
       except NoEntityError:
-        return self.abort(404, '%s not found.' % self.model.__class__.__name__)
+        return self.abort(404, '%s not found.' % type(self.model()).__name__)
     elif id:
       entity = self.model.get_by_id(id)
       if not entities:
-        return self.abort(404, '%s not found.' % self.model.__class__.__name__)
+        return self.abort(404, '%s not found.' % type(self.model()).__name__)
 
     entity_json = self.extract_json()
     self.update_model(entity, **entity_json)
@@ -329,7 +331,7 @@ class ModelHandlerMixin(object):
       self.model.get_by_id(id)
 
     if entity is None:
-      return self.abort(404, '%s not found.' % self.model.__class__.__name__)
+      return self.abort(404, '%s not found.' % type(self.model()).__name__)
 
     self.model_delete(entity)
     self._post_delete_hook(entity)

@@ -32,7 +32,8 @@ import webapp2_extras.auth
 
 
 logger = logging.getLogger(__name__)
-__all__ = ['AuthError',
+__all__ = ['get_config',
+           'AuthError',
            'ProviderConfNotFoundError',
            'BaseWelcomeHandler',
            'BaseOAuth2CallbackHandler',
@@ -80,15 +81,16 @@ class ProviderConfNotFoundError(AuthError):
 
 def get_config():
   # Get config to this module
-  config = webapp2.get_app().config.load_config('stones.auth',
-    default_values=AUTH_CONFIG,
-    required_keys=['templates', 'email_sender'])
+  app = webapp2.get_app()
   try:
+    config = app.config.load_config('stones.auth',
+      default_values=AUTH_CONFIG,
+      required_keys=['templates', 'email_sender'])
     templates = config['templates']
+    email_sender = config['email_sender']
   except KeyError, e:
-    del webapp2.app.config['stones.auth']
     try:
-      webapp2.app.config.loaded.remove('stones.auth')
+      app.config.loaded.remove('stones.auth')
     except Exception, e:
       pass
     config = get_config()
